@@ -9,12 +9,15 @@ using dclass::Class;
 Client::Client(ConfigNode, ClientAgent* client_agent) :
     m_client_agent(client_agent)
 {
+    assert(std::this_thread::get_id() == g_main_thread_id);
+
     m_channel = m_client_agent->m_ct.alloc_channel();
     if(!m_channel) {
         m_log = m_client_agent->log();
         send_disconnect(CLIENT_DISCONNECT_GENERIC, "Client capacity reached");
         return;
     }
+
     m_allocated_channel = m_channel;
 
     stringstream name;
@@ -82,6 +85,47 @@ void Client::log_event(LoggedEvent &event)
     g_eventsender.send(event);
 }
 
+void Client::generate_timeout(TimeoutSetCallback timeout_set_callback)
+{
+    {
+        std::lock_guard<std::mutex> lock(m_timeout_mutex);
+        m_pending_timeouts.push(timeout_set_callback);
+    }
+
+    if(std::this_thread::get_id() != g_main_thread_id) {
+        TaskQueue::singleton.enqueue_task([self = this]() {
+            self->generate_timeouts();
+        });
+    } else {
+        generate_timeouts();
+    }
+}
+
+void Client::generate_timeouts()
+{
+    assert(std::this_thread::get_id() == g_main_thread_id);
+
+    if(m_is_generating_timeouts) {
+        // Already in the middle of another generate_timeouts invocation.
+        return;
+    }
+
+    m_is_generating_timeouts = true;
+
+    {
+        std::lock_guard<std::mutex> lock(m_timeout_mutex);
+
+        while(!m_pending_timeouts.empty()) {
+            TimeoutSetCallback timeout_set_callback = m_pending_timeouts.front();
+            m_pending_timeouts.pop();
+            Timeout* timeout = new Timeout();
+            timeout_set_callback(timeout);
+        }
+    }
+
+    m_is_generating_timeouts = false;
+}
+
 // lookup_object returns the class of the object with a do_id.
 // If that object is not visible to the client, nullptr will be returned instead.
 const Class *Client::lookup_object(doid_t do_id)
@@ -113,9 +157,9 @@ const Class *Client::lookup_object(doid_t do_id)
 }
 
 // lookup_interests returns a list of all the interests that a parent-zone pair is visible to.
-list<Interest> Client::lookup_interests(doid_t parent_id, zone_t zone_id)
+vector<Interest> Client::lookup_interests(doid_t parent_id, zone_t zone_id)
 {
-    list<Interest> interests;
+    vector<Interest> interests;
     for(const auto& it : m_interests) {
         if(parent_id == it.second.parent && (it.second.zones.find(zone_id) != it.second.zones.end())) {
             interests.push_back(it.second);
@@ -246,7 +290,7 @@ void Client::close_zones(doid_t parent, const unordered_set<zone_t> &killed_zone
 {
     // Kill off all objects that are in the matched parent/zones:
 
-    list<doid_t> to_remove;
+    vector<doid_t> to_remove;
     for(const auto& it : m_visible_objects) {
         const VisibleObject& visible_object = it.second;
         if(visible_object.parent != parent) {
@@ -455,6 +499,13 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
         m_log->debug() << "Removed session object with id " << do_id << ".\n";
 
         m_session_objects.erase(do_id);
+    }
+    break;
+    case CLIENTAGENT_GET_TLVS: {
+        DatagramPtr resp = Datagram::create(sender, m_channel, CLIENTAGENT_GET_TLVS_RESP);
+        resp->add_uint32(dgi.read_uint32()); // Context
+        resp->add_blob(get_tlvs());
+        route_datagram(resp);
     }
     break;
     case CLIENTAGENT_GET_NETWORK_ADDRESS: {
@@ -823,15 +874,25 @@ InterestOperation::InterestOperation(
     m_client_context(client_context),
     m_request_context(request_context),
     m_parent(parent), m_zones(zones),
-    m_timeout(std::make_shared<Timeout>(timeout, bind(&InterestOperation::timeout, this)))
+    m_timeout_interval(timeout)
 {
     m_callers.insert(m_callers.end(), caller);
-    m_timeout->start();
+    m_client->generate_timeout(bind(&InterestOperation::on_timeout_generate, this, 
+                               std::placeholders::_1));
 }
 
 InterestOperation::~InterestOperation()
 {
     assert(m_finished);
+}
+
+void InterestOperation::on_timeout_generate(Timeout* timeout)
+{
+    assert(std::this_thread::get_id() == g_main_thread_id);
+
+    m_timeout = timeout;
+    m_timeout->initialize(m_timeout_interval, bind(&InterestOperation::timeout, this));
+    m_timeout->start();
 }
 
 void InterestOperation::timeout()
@@ -843,9 +904,15 @@ void InterestOperation::timeout()
 
 void InterestOperation::finish(bool is_timeout)
 {
-    if(!is_timeout && !m_timeout->cancel()) {
-        // The timeout is already running; let it clean up instead.
-        return;
+    if(!is_timeout && m_timeout != nullptr) {
+        if(!m_timeout->cancel()) {
+            // The timeout is already running; let it clean up instead.
+            return;
+        }
+
+        // We've already invoked cancel on the m_timeout object:
+        // It's gonna get around to deleting itself as soon as the async operation runs, so it's not safe to hold onto its pointer.
+        m_timeout = nullptr;
     }
 
     // Send objects in the initial snapshot
@@ -868,7 +935,7 @@ void InterestOperation::finish(bool is_timeout)
     // N. B. We need to delete the pending interest before we send queued
     //       datagrams, so that they aren't just re-added to the queue.
     //       Move the queued datagrams to the stack so it is safe to delete the Operation.
-    list<DatagramHandle> dispatch = move(m_pending_datagrams);
+    vector<DatagramHandle> dispatch = move(m_pending_datagrams);
 
     // Delete the Interest Operation
     m_client->m_pending_interests.erase(m_request_context);

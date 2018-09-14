@@ -1,41 +1,93 @@
 #include "Timeout.h"
 #include "core/global.h"
 
-#include <boost/bind.hpp>
-
 Timeout::Timeout(unsigned long ms, std::function<void()> f) :
-    m_timer(io_service, boost::posix_time::milliseconds(ms)),
-    m_callback(f),
-    m_timeout_interval(ms),
+    m_loop(g_loop),
+    m_timer(nullptr),
+    m_callback_disabled(false)
+{
+    initialize(ms, f);
+}
+
+Timeout::Timeout() :
+    m_loop(g_loop),
+    m_timer(nullptr),
     m_callback_disabled(false)
 {
 }
 
-void Timeout::timer_callback(const boost::system::error_code &ec)
+void Timeout::initialize(unsigned long ms, TimeoutCallback callback)
 {
-    if(ec) {
-        return; // We were canceled.
+    assert(std::this_thread::get_id() == g_main_thread_id);
+
+    m_timeout_interval = ms;
+    m_callback = callback;
+}
+
+void Timeout::setup()
+{
+    assert(m_timer == nullptr);
+
+    m_timer = m_loop->resource<uvw::TimerHandle>();
+
+    m_timer->on<uvw::TimerEvent>([self = this](const uvw::TimerEvent&, uvw::TimerHandle&) {
+        self->timer_callback();
+    });
+}
+
+void Timeout::destroy_timer()
+{
+    m_callback = nullptr;
+
+    if(m_timer) {
+        m_timer->stop();
+        m_timer->close();
+        m_timer = nullptr;
     }
 
-    if(m_callback_disabled.exchange(true)) {
-        return; // Stop m_callback running twice or after successful cancel().
+    delete this;
+}
+
+void Timeout::timer_callback()
+{
+    assert(std::this_thread::get_id() == g_main_thread_id);
+
+    if(m_callback != nullptr && !m_callback_disabled.exchange(true)) {
+        m_callback();
     }
 
-    m_callback();
+    destroy_timer();
 }
 
 void Timeout::reset()
 {
-    m_timer.cancel();
-    m_timer.expires_from_now(boost::posix_time::millisec(m_timeout_interval));
-    m_timer.async_wait(boost::bind(&Timeout::timer_callback, shared_from_this(),
-                                   boost::asio::placeholders::error));
+    assert(std::this_thread::get_id() == g_main_thread_id);
+
+    if(m_timer == nullptr) {
+        setup();
+    }
+
+    m_timer->stop();
+    m_timer->start(uvw::TimerHandle::Time{m_timeout_interval}, uvw::TimerHandle::Time{0});
 }
 
 bool Timeout::cancel()
 {
-    m_timer.cancel();
-    return !m_callback_disabled.exchange(true);
+    const bool already_cancelled = !m_callback_disabled.exchange(true);
+
+    if(std::this_thread::get_id() != g_main_thread_id) {
+        TaskQueue::singleton.enqueue_task([self = this]() {
+            self->cancel();
+        });
+
+        return already_cancelled;
+    }
+
+    if(m_timer != nullptr) {
+        destroy_timer();
+    }
+
+    return already_cancelled;
 }
 
 Timeout::~Timeout()

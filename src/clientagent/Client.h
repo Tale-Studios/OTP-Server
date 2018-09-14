@@ -4,6 +4,7 @@
 #include "util/EventSender.h"
 #include "util/Timeout.h"
 
+#include <vector>
 #include <queue>
 #include <memory>
 #include <unordered_set>
@@ -68,13 +69,14 @@ class InterestOperation
     std::unordered_set<zone_t> m_zones;
     std::unordered_set<channel_t> m_callers;
 
-    std::shared_ptr<Timeout> m_timeout;
+    unsigned long m_timeout_interval;
+    Timeout* m_timeout = nullptr;
 
     bool m_has_total = false;
     doid_t m_total = 0; // as doid_t because <max_objs_in_zones> == <max_total_objs>
 
-    std::list<DatagramHandle> m_pending_generates;
-    std::list<DatagramHandle> m_pending_datagrams;
+    std::vector<DatagramHandle> m_pending_generates;
+    std::vector<DatagramHandle> m_pending_datagrams;
 
     InterestOperation(Client *client, unsigned long timeout,
                       uint16_t interest_id, uint32_t client_context, uint32_t request_context,
@@ -86,6 +88,7 @@ class InterestOperation
     void queue_expected(DatagramHandle dg);
     void queue_datagram(DatagramHandle dg);
     void finish(bool is_timeout = false);
+    void on_timeout_generate(Timeout* timeout);
     void timeout();
 
   private:
@@ -141,6 +144,9 @@ class Client : public MDParticipantInterface
     // new LogCategory, incase we did not receive one from the Client Agent
     std::unique_ptr<LogCategory> m_log_owner;
 
+    std::mutex m_timeout_mutex;
+    std::queue<TimeoutSetCallback> m_pending_timeouts;
+
     Client(ConfigNode config, ClientAgent* client_agent);
 
     // annihilate should be called to delete the client after the client has-left/disconnected.
@@ -154,7 +160,7 @@ class Client : public MDParticipantInterface
     const dclass::Class* lookup_object(doid_t do_id);
 
     // lookup_interests returns a list of all the interests that a parent-zone pair is visible to.
-    std::list<Interest> lookup_interests(doid_t parent_id, zone_t zone_id);
+    std::vector<Interest> lookup_interests(doid_t parent_id, zone_t zone_id);
 
     // build_interest will build an interest from a datagram. It is expected that the datagram
     // iterator is positioned such that next item to be read is the interest_id.
@@ -251,10 +257,14 @@ class Client : public MDParticipantInterface
     virtual uint16_t get_remote_port() = 0;
     virtual const std::string get_local_address() = 0;
     virtual uint16_t get_local_port() = 0;
+    virtual const std::vector<uint8_t>& get_tlvs() const = 0;
 
   private:
+    void generate_timeout(TimeoutSetCallback timeout_set_callback);
+    void generate_timeouts();
     // notify_interest_done send a CLIENTAGENT_DONE_INTEREST_RESP to the
     // interest operation's caller, if one has been set.
     void notify_interest_done(uint16_t interest_id, channel_t caller);
     void notify_interest_done(const InterestOperation* iop);
+    bool m_is_generating_timeouts = false;
 };

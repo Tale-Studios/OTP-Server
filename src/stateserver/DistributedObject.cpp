@@ -34,11 +34,18 @@ DistributedObject::DistributedObject(StateServer *stateserver, doid_t do_id, doi
         for(int i = 0; i < count; ++i) {
             uint16_t field_id = dgi.read_uint16();
             const Field *field = m_dclass->get_field_by_id(field_id);
+            if(!field) {
+                m_log->error() << "Received unknown field with ID " << field_id 
+                               << " within an OTHER section.\n";
+                break;
+            }
+
             if(field->has_keyword("ram")) {
                 dgi.unpack_field(field, m_ram_fields[field]);
             } else {
                 m_log->error() << "Received non-RAM field " << field->get_name()
                                << " within an OTHER section.\n";
+                dgi.skip_field(field);
             }
         }
     }
@@ -98,7 +105,7 @@ void DistributedObject::append_required_data(DatagramPtr dg, bool client_only, b
 void DistributedObject::append_other_data(DatagramPtr dg, bool client_only, bool also_owner)
 {
     if(client_only) {
-        list<const Field*> broadcast_fields;
+        vector<const Field*> broadcast_fields;
         for(auto it = m_ram_fields.begin(); it != m_ram_fields.end(); ++it) {
             if(it->first->has_keyword("broadcast") || it->first->has_keyword("clrecv")
                || (also_owner && it->first->has_keyword("ownrecv"))) {

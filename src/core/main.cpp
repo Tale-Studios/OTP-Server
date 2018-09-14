@@ -6,11 +6,17 @@
 #include "dclass/dc/Class.h"
 using dclass::Class;
 
-#include <boost/filesystem.hpp>
 #include <cstring>
 #include <string>  // std::string
 #include <vector>  // std::vector
 #include <fstream> // std::ifstream
+#ifdef __linux__
+#include <signal.h>
+#include <pthread.h> // for setting thread-local storage size
+#endif
+#include "util/TaskQueue.h"
+#include "util/filesystem.h"
+
 using namespace std;
 
 static LogCategory mainlog("main", "Main");
@@ -41,6 +47,25 @@ int main(int argc, char *argv[])
     bool prettyPrint = true;
 #endif
 
+#ifdef __linux__
+    // This is a bit of a kludge, but it's necessary:
+    // We need to make sure that we don't exceed the default TLS threshold with stdlibs such as musl.
+    pthread_attr_t attr;
+
+    if(pthread_attr_init(&attr))
+        return 1;
+
+    // 2 << 20 is the glibc default (page aligned).
+    if(pthread_attr_setstacksize(&attr, 2 << 20))
+        return 1;
+
+    if(pthread_setattr_default_np(&attr))
+        return 1;
+
+    // We need to ignore SIGPIPE issues ourselves for Linux (libuv issue #1254)
+    signal(SIGPIPE, SIG_IGN);
+#endif
+ 
     int config_arg_index = -1;
     cfg_file = "astrond.yml";
     LogSeverity sev = g_logger->get_min_severity();
@@ -99,7 +124,7 @@ int main(int argc, char *argv[])
             return 1;
         } else {
             if(config_arg_index != -1) {
-                cerr << "Recieved additional positional argument \""
+                cerr << "Received additional positional argument \""
                      << string(argv[i]) << "\" but can only accept one."
                      << "\n  First positional: \""
                      << string(argv[config_arg_index]) << "\".\n";
@@ -109,33 +134,46 @@ int main(int argc, char *argv[])
         }
     }
 
+    g_loop = uvw::Loop::getDefault();
+    g_main_thread_id = std::this_thread::get_id();
+
     g_logger->set_color_enabled(prettyPrint);
 
     if(config_arg_index != -1) {
-        string filename = "";
         cfg_file = argv[config_arg_index];
 
-        try {
-            // seperate path
-            boost::filesystem::path p(cfg_file);
-            boost::filesystem::path dir = p.parent_path();
-            filename = p.filename().string();
-            string dir_str = dir.string();
+        // seperate path
+        string filename = fs::filename(cfg_file);
+        string dir_str = fs::parent_of(cfg_file);
+        string cur_dir = fs::current_path();
 
-            // change directory
-            if(!dir_str.empty()) {
-                boost::filesystem::current_path(dir_str);
-            }
-        } catch(const boost::filesystem::filesystem_error&) {
-            mainlog.fatal() << "Could not change working directory to config directory.\n";
+        if(cur_dir == "") {
+            mainlog.fatal() << "Failed to get current working directory.\n";
             return 1;
+        }
+
+        if(dir_str == cur_dir) {
+            // we're already in the directory that the configuration is under.
+            dir_str = "";
+        }
+
+        // change directory
+        if(!dir_str.empty()) {
+            if(!fs::current_path(dir_str)) {
+                mainlog.fatal() << "Could not change working directory to config directory.\n";
+                return 1;
+            }
         }
 
         cfg_file = filename;
     }
 
-    mainlog.info() << "Loading configuration file...\n";
+    if(!fs::file_exists(cfg_file) || !fs::is_readable(cfg_file)) {
+        mainlog.fatal() << "Config file " << cfg_file << " does not exist or isn't readable.\n";
+        return 1;
+    }
 
+    mainlog.info() << "Loading configuration file...\n";
 
     ifstream file(cfg_file.c_str());
     if(!file.is_open()) {
@@ -178,6 +216,7 @@ int main(int argc, char *argv[])
     astron_handle_signals();
 
     try {
+        TaskQueue::singleton.init_queue();
         // Initialize configured MessageDirector
         MessageDirector::singleton.init_network();
         g_eventsender.init(eventlogger_addr.get_val());
@@ -221,7 +260,7 @@ int main(int argc, char *argv[])
     // Run the main event loop
     int exit_code = 0;
     try {
-        io_service.run();
+        g_loop->run();
     }
 
     // This exception is propogated if astron_shutdown is called
