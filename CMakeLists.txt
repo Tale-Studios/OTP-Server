@@ -1,4 +1,6 @@
-cmake_minimum_required(VERSION 2.8.9 FATAL_ERROR) # Required for FindBoost
+cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 project(Astron)
 
@@ -19,7 +21,6 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
 ### Define extra windows defines ###
 if(WIN32)
-	add_definitions(-DBOOST_USE_WINDOWS_H)
 	add_definitions(-DWIN32_LEAN_AND_MEAN)
 
 	add_definitions(-D_WIN32_WINDOWS)
@@ -30,6 +31,21 @@ if(WIN32)
 	if(MSVC)
 		add_definitions("/wd4267") # 64-bit size_t complaints
 	endif()
+else()
+	option(STATIC_ASTRON "Builds a self-contained Astron binary (Non-Win32 only)" OFF)
+endif()
+
+if(STATIC_ASTRON)
+	# !!! DO NOT SET THIS UNLESS YOU KNOW WHAT YOU'RE DOING !!!
+	# Static Astron builds are still *very* experimental, and there are still issues with linking the C++ Mongo driver in some instances.
+	set(CMAKE_EXE_LINK_DYNAMIC_C_FLAGS)
+	set(CMAKE_EXE_LINK_DYNAMIC_CXX_FLAGS)
+	set(CMAKE_SHARED_LIBRARY_C_FLAGS)
+	set(CMAKE_SHARED_LIBRARY_CXX_FLAGS)
+	set(CMAKE_SHARED_LIBRARY_LINK_C_FLAGS)
+	set(CMAKE_SHARED_LIBRARY_LINK_CXX_FLAGS)
+	set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
+	set(CMAKE_EXE_LINKER_FLAGS "-static")
 endif()
 
 ### Set build type to Release with Debug Info by default ###
@@ -56,36 +72,23 @@ endif()
 
 
 ### Add per-compiler flags ###
+# Common flags:
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR
    CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Werror")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Werror -Wno-error=deprecated-declarations")
 endif()
 
-if(CMAKE_GENERATOR STREQUAL Xcode)
-	add_definitions(-std=c++0x -stdlib=libc++)
-endif()
-
+# Clang-specific flags:
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-	add_definitions(-std=c++11)
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=deprecated-register")
 endif()
-
-if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-	execute_process(COMMAND "${CMAKE_C_COMPILER}" -dumpversion OUTPUT_VARIABLE GCC_VERSION)
-	message(STATUS "GCC Version: ${GCC_VERSION}")
-	if(GCC_VERSION VERSION_GREATER 4.7 OR GCC_VERSION VERSION_EQUAL 4.7)
-		add_definitions(-std=c++11) # Enable the new C++ standard
-	else()
-		add_definitions(-std=c++0x) # Enable the new C++ standard
-	endif()
-endif()
-
 
 ### Debug Flags -- compile in spam/debug log messages ###
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DASTRON_DEBUG_MESSAGES")
 
 
 ### OS Specific Settings ###
-if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")  ### Windows requires winsock
+if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")	### Windows requires winsock
 	list(APPEND EXTRA_LIBS wsock32 ws2_32)
 endif()
 
@@ -106,20 +109,16 @@ if(BUILD_YAML)
 	add_definitions(-DASTRON_WITH_YAML)
 endif()
 
-### BOOST Dependency -- required by yaml-cpp and networking ###
-set(Boost_USE_STATIC_LIBS ON CACHE BOOL "If true, will try to find static Boost first instead of dynamic.")
-find_package(Boost REQUIRED COMPONENTS system filesystem thread regex)
+# libuv dependency -- required by networking
+find_package(libuv REQUIRED)
+include_directories(${LIBUV_INCLUDE_DIR})
+link_directories(${LIBUV_LIBRARY_DIR})
+message(STATUS "Found the libuv library:")
+message("	${LIBUV_LIBRARY}\n")
+
+# We only really need this for Boost's ICL at this point, but until it's fully deprecated:
+find_package(Boost REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
-link_directories(${Boost_LIBRARY_DIRS})
-
-add_definitions(
-	-DBOOST_ALL_NO_LIB
-	-D_SCL_SECURE_NO_WARNINGS
-)
-
-### SSL Dependency -- required by Boost::ASIO's SSL library
-find_package(OpenSSL REQUIRED)
-include_directories(${OPENSSL_INCLUDE_DIR})
 
 set(USE_32BIT_DATAGRAMS OFF CACHE BOOL
 	"If on, datagrams will use 32-bit length tags instead of 16-bit.")
@@ -181,8 +180,10 @@ if(BUILD_DBSERVER)
 	### Check for the presence of the MongoDB client library ###
 	find_package(libmongocxx QUIET)
 	find_package(libbsoncxx QUIET)
+	find_package(libmongocxx-static QUIET)
+	find_package(libbsoncxx-static QUIET)
 
-	if(LIBMONGOCXX_LIBRARIES)
+	if(LIBMONGOCXX_LIBRARIES OR LIBMONGOCXX_STATIC_LIBRARIES)
 		set(BUILD_DB_MONGO ON CACHE BOOL "If on, will support MongoDB.")
 		message(STATUS "MongoDB client library found")
 	else()
@@ -191,11 +192,18 @@ if(BUILD_DBSERVER)
 	endif()
 	if(BUILD_DB_MONGO)
 		list(APPEND DBSERVER_FILES
-		     src/database/MongoDatabase.cpp)
-		include_directories(${LIBMONGOCXX_INCLUDE_DIRS} ${LIBBSONCXX_INCLUDE_DIRS})
-		link_directories(${LIBMONGOCXX_LIBRARY_DIRS} ${LIBBSONCXX_LIBRARY_DIRS})
-		list(APPEND DB_LIBRARY_NAMES ${LIBMONGOCXX_LIBRARIES} ${LIBBSONCXX_LIBRARIES})
-
+			src/database/MongoDatabase.cpp)
+		if(LIBMONGOCXX_LIBRARIES)
+			include_directories(${LIBMONGOCXX_INCLUDE_DIRS} ${LIBBSONCXX_INCLUDE_DIRS})
+			link_directories(${LIBMONGOCXX_LIBRARY_DIRS} ${LIBBSONCXX_LIBRARY_DIRS})
+			list(APPEND DB_LIBRARY_NAMES ${LIBMONGOCXX_LIBRARIES} ${LIBBSONCXX_LIBRARIES})
+		elseif(LIBMONGOCXX_STATIC_LIBRARIES)
+			include_directories(${LIBMONGOCXX_STATIC_INCLUDE_DIRS} ${LIBBSONCXX_STATIC_INCLUDE_DIRS})
+			link_directories(${LIBMONGOCXX_STATIC_LIBRARY_DIRS} ${LIBBSONCXX_STATIC_LIBRARY_DIRS})
+			list(APPEND DB_LIBRARY_NAMES ${LIBMONGOCXX_STATIC_LIBRARIES} ${LIBBSONCXX_STATIC_LIBRARIES})
+		else()
+			message(FATAL_ERROR "BUILD_DB_MONGO is set but no libraries were found, this is never supposed to happen!")	
+		endif()
 		add_test(db_mongo "${PYTHON2_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/test/test_dbserver_mongodb.py")
 		add_test(validate_config_dbmongo "${PYTHON2_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/test/test_config_dbmongo.py")
 		# TODO: Config validation test
@@ -214,33 +222,33 @@ if(BUILD_DBSERVER)
 		if(SOCI_postgresql_FOUND)
 			set(BUILD_DB_POSTGRESQL ON CACHE BOOL "If on, will support PostgreSQL.")
 			message(STATUS "  PostgreSQL found")
-			message("    ${SOCI_postgresql_PLUGIN}")
+			message("	 ${SOCI_postgresql_PLUGIN}")
 		else()
 			unset(BUILD_DB_POSTGRESQL CACHE)
 			message(STATUS "  PostgreSQL not found")
-			message("    won't add PostgreSQl support")
+			message("	 won't add PostgreSQl support")
 		endif()
 
 		### MySQL support ###
 		if(SOCI_mysql_FOUND)
 			set(BUILD_DB_MYSQL ON CACHE BOOL "If on, will support MySQL.")
 			message(STATUS "  MySQL found")
-			message("    ${SOCI_mysql_PLUGIN}")
+			message("	 ${SOCI_mysql_PLUGIN}")
 		else()
 			unset(BUILD_DB_MYSQL CACHE)
 			message(STATUS "  MySQL not found")
-			message("    won't add MySQL support")
+			message("	 won't add MySQL support")
 		endif()
 
 		### SQLite3 support ###
 		if(SOCI_sqlite3_FOUND)
 			set(BUILD_DB_SQLITE ON CACHE BOOL "If on, will support SQLite3.")
 			message(STATUS "  SQLite3 found")
-			message("    ${SOCI_sqlite3_PLUGIN}")
+			message("	 ${SOCI_sqlite3_PLUGIN}")
 		else()
 			unset(BUILD_DB_SQLITE CACHE)
 			message(STATUS "  SQLite3 not found")
-			message("    won't add SQLite3 support")
+			message("	 won't add SQLite3 support")
 		endif()
 
 		message("")
@@ -254,12 +262,14 @@ if(BUILD_DBSERVER)
 				${DBSERVER_FILES}
 				src/database/SociSQLDatabase.cpp
 			)
-    list(APPEND DB_LIBRARY_NAMES soci_core dl)
+
+			list(APPEND DB_LIBRARY_NAMES soci_core dl)
 			if(BUILD_DB_POSTGRESQL)
-        list(APPEND DB_LIBRARY_NAMES pq)
-				add_test(db_pgsql "${PYTHON2_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/test/test_dbserver_postgres.py")
+				list(APPEND DB_LIBRARY_NAMES pq)
+				add_test(db_pgsql 
+					"${PYTHON2_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/test/test_dbserver_postgres.py")
 				add_test(validate_config_dbpostgres
-					 "${PYTHON2_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/test/test_config_dbpostgres.py")
+					"${PYTHON2_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/test/test_config_dbpostgres.py")
 				set(PYTHON_TESTS ${PYTHON_TESTS} db_pgsql validate_config_dbpostgres)
 			endif()
 		endif()
@@ -376,10 +386,10 @@ set(UTIL_FILES
 	src/util/DatagramIterator.h
 	src/util/EventSender.cpp
 	src/util/EventSender.h
-	src/util/password_prompt.cpp
-	src/util/password_prompt.h
 	src/util/Timeout.cpp
 	src/util/Timeout.h
+	src/util/TaskQueue.cpp
+	src/util/TaskQueue.h
 )
 
 set(NET_FILES
@@ -395,8 +405,6 @@ set(NET_FILES
 	src/net/NetworkConnector.h
 	src/net/TcpAcceptor.cpp
 	src/net/TcpAcceptor.h
-	src/net/SslAcceptor.cpp
-	src/net/SslAcceptor.h
 )
 
 include_directories(src)
@@ -408,7 +416,7 @@ add_executable(astrond
 	${CONFIG_FILES}
 	${MESSAGEDIRECTOR_FILES}
 	${UTIL_FILES}
-  ${NET_FILES}
+	${NET_FILES}
 	${STATESERVER_FILES}
 	${EVENTLOGGER_FILES}
 	${CLIENTAGENT_FILES}
@@ -453,7 +461,8 @@ endif()
 add_subdirectory(src/dclass)
 
 add_dependencies(astrond dclass)
-target_link_libraries(astrond dclass ${OPENSSL_LIBRARIES} ${YAMLCPP_LIBRARY} ${DB_LIBRARY_NAMES} ${Boost_LIBRARIES} ${EXTRA_LIBS})
+target_link_libraries(astrond dclass ${YAMLCPP_LIBRARY} ${DB_LIBRARY_NAMES} ${LIBUV_LIBRARY} ${EXTRA_LIBS})
+install(TARGETS astrond DESTINATION bin)
 
 ### Handle some final testing configuration ###
 if(USE_32BIT_DATAGRAMS)
