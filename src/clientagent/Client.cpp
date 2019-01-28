@@ -782,7 +782,7 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
         // N.B.: This object visible might be still visible through an interest.
         // We don't have to touch it, just remove the ownership
         handle_remove_ownership(do_id);
-        m_owned_objects.erase(do_id);        
+        m_owned_objects.erase(do_id);
     }
     break;
     default:
@@ -877,29 +877,21 @@ InterestOperation::InterestOperation(
     m_timeout_interval(timeout)
 {
     m_callers.insert(m_callers.end(), caller);
-    m_client->generate_timeout(bind(&InterestOperation::on_timeout_generate, this, 
-                               std::placeholders::_1));
+
+    this->finish(true);
 }
 
 InterestOperation::~InterestOperation()
 {
-    assert(m_finished);
+    delete this;
 }
 
 void InterestOperation::on_timeout_generate(Timeout* timeout)
 {
-    assert(std::this_thread::get_id() == g_main_thread_id);
-
-    m_timeout = timeout;
-    m_timeout->initialize(m_timeout_interval, bind(&InterestOperation::timeout, this));
-    m_timeout->start();
 }
 
 void InterestOperation::timeout()
 {
-    lock_guard<recursive_mutex> lock(m_client->m_client_lock);
-    m_client->m_log->warning() << "Interest operation timed out; forcing.\n";
-    finish(true);
 }
 
 void InterestOperation::finish(bool is_timeout)
@@ -929,7 +921,6 @@ void InterestOperation::finish(bool is_timeout)
     }
 
     // Distribute the interest done message
-    m_client->notify_interest_done(this);
     m_client->handle_interest_done(m_interest_id, m_client_context);
 
     // N. B. We need to delete the pending interest before we send queued
@@ -946,10 +937,6 @@ void InterestOperation::finish(bool is_timeout)
         dgi.seek_payload();
         m_client->handle_datagram(it, dgi);
     }
-
-    m_finished = true;
-
-    delete this;
 }
 
 bool InterestOperation::is_ready()
