@@ -197,7 +197,7 @@ static void bamboo2bson(single_context builder,
         auto sub_builder = builder << open_document;
 
         for(unsigned int i = 0; i < fields; ++i) {
-            const dclass::Field *field = s->get_field(i);
+            DCField *field = s->get_field(i);
             bamboo2bson(sub_builder << field->get_name(), field->get_type(), dgi);
         }
 
@@ -416,7 +416,7 @@ static void bson2bamboo(const dclass::DistributedType *type,
             const dclass::Struct *s = type->as_struct();
             size_t fields = s->get_num_fields();
             for(unsigned int i = 0; i < fields; ++i) {
-                const dclass::Field *field = s->get_field(i);
+                DCField *field = s->get_field(i);
                 auto element = document[field->get_name()];
                 if(!element) {
                     throw ConversionException("Struct field is absent", field->get_name());
@@ -799,7 +799,7 @@ class MongoDatabase : public DatabaseBackend
         // kind of object we just modified.)
         auto obj_v = obj->view();
         string dclass_name = obj_v["dclass"].get_utf8().value.to_string();
-        const dclass::Class *dclass = g_dcf->get_class_by_name(dclass_name);
+        DCClass *dclass = g_dcf->get_class_by_name(dclass_name);
         if(!dclass) {
             m_log->error() << "Encountered unknown database object: "
                            << dclass_name << "(" << operation->doid() << ")" << endl;
@@ -842,7 +842,7 @@ class MongoDatabase : public DatabaseBackend
                        << bsoncxx::to_json(obj) << endl;
 
         string dclass_name = obj["dclass"].get_utf8().value.to_string();
-        const dclass::Class *dclass = g_dcf->get_class_by_name(dclass_name);
+        DCClass *dclass = g_dcf->get_class_by_name(dclass_name);
         if(!dclass) {
             m_log->error() << "Encountered unknown database object: "
                            << dclass_name << "(" << doid << ")" << endl;
@@ -857,7 +857,7 @@ class MongoDatabase : public DatabaseBackend
         try {
             for(const auto &it : fields) {
                 string name = it.key().to_string();
-                const dclass::Field *field = dclass->get_field_by_name(name);
+                DCField *field = dclass->get_field_by_name(name);
                 if(!field) {
                     m_log->warning() << "Encountered unexpected field " << name
                                      << " while formatting " << dclass_name

@@ -8,10 +8,12 @@
 #include <string.h> // memcpy
 #include <memory>
 #include "core/types.h"
-#include "dclass/util/byteorder.h"
-#include "dclass/dc/DistributedType.h" // sizetag_t
 
-using dclass::sizetag_t;
+#ifdef DCLASS_32BIT_SIZETAG
+typedef uint32_t sizetag_t;
+#else
+typedef uint16_t sizetag_t;
+#endif
 
 #ifdef ASTRON_32BIT_DATAGRAMS
 typedef uint32_t dgsize_t;
@@ -74,7 +76,7 @@ class Datagram
     //     allows you to specify the capacity of the datagram ahead of time,
     //     this should be used when the exact size is known ahead of time for performance
     Datagram(dgsize_t capacity) : buf(new uint8_t[capacity]), buf_cap(capacity),
-    	buf_offset(0)
+        buf_offset(0)
     {
     }
     */
@@ -228,7 +230,7 @@ class Datagram
     void add_int16(const int16_t &v)
     {
         check_add_length(2);
-        *(int16_t *)(buf + buf_offset) = swap_le(v);
+        *(int16_t *)(buf + buf_offset) = v;
         buf_offset += 2;
     }
 
@@ -236,7 +238,7 @@ class Datagram
     void add_int32(const int32_t &v)
     {
         check_add_length(4);
-        *(int32_t *)(buf + buf_offset) = swap_le(v);
+        *(int32_t *)(buf + buf_offset) = v;
         buf_offset += 4;
     }
 
@@ -244,7 +246,7 @@ class Datagram
     void add_int64(const int64_t &v)
     {
         check_add_length(8);
-        *(int64_t *)(buf + buf_offset) = swap_le(v);
+        *(int64_t *)(buf + buf_offset) = v;
         buf_offset += 8;
     }
 
@@ -260,7 +262,7 @@ class Datagram
     void add_uint16(const uint16_t &v)
     {
         check_add_length(2);
-        *(uint16_t *)(buf + buf_offset) = swap_le(v);
+        *(uint16_t *)(buf + buf_offset) = v;
         buf_offset += 2;
     }
 
@@ -268,7 +270,7 @@ class Datagram
     void add_uint32(const uint32_t &v)
     {
         check_add_length(4);
-        *(uint32_t *)(buf + buf_offset) = swap_le(v);
+        *(uint32_t *)(buf + buf_offset) = v;
         buf_offset += 4;
     }
 
@@ -276,7 +278,7 @@ class Datagram
     void add_uint64(const uint64_t &v)
     {
         check_add_length(8);
-        *(uint64_t *)(buf + buf_offset) = swap_le(v);
+        *(uint64_t *)(buf + buf_offset) = v;
         buf_offset += 8;
     }
 
@@ -284,7 +286,7 @@ class Datagram
     void add_float32(const float &v)
     {
         check_add_length(4);
-        *(float *)(buf + buf_offset) = swap_le(v);
+        *(float *)(buf + buf_offset) = v;
         buf_offset += 4;
     }
 
@@ -292,7 +294,7 @@ class Datagram
     void add_float64(const double &v)
     {
         check_add_length(8);
-        *(double *)(buf + buf_offset) = swap_le(v);
+        *(double *)(buf + buf_offset) = v;
         buf_offset += 8;
     }
 
@@ -302,7 +304,7 @@ class Datagram
     void add_size(const sizetag_t &v)
     {
         check_add_length(sizeof(sizetag_t));
-        *(sizetag_t *)(buf + buf_offset) = swap_le(v);
+        *(sizetag_t *)(buf + buf_offset) = v;
         buf_offset += sizeof(sizetag_t);
     }
 
@@ -312,7 +314,7 @@ class Datagram
     void add_dgsize(const dgsize_t &v)
     {
         check_add_length(sizeof(dgsize_t));
-        *(dgsize_t *)(buf + buf_offset) = swap_le(v);
+        *(dgsize_t *)(buf + buf_offset) = v;
         buf_offset += sizeof(dgsize_t);
     }
 
@@ -322,7 +324,7 @@ class Datagram
     void add_channel(const channel_t &v)
     {
         check_add_length(sizeof(channel_t));
-        *(channel_t *)(buf + buf_offset) = swap_le(v);
+        *(channel_t *)(buf + buf_offset) = v;
         buf_offset += sizeof(channel_t);
     }
 
@@ -332,7 +334,7 @@ class Datagram
     void add_doid(const doid_t &v)
     {
         check_add_length(sizeof(doid_t));
-        *(doid_t *)(buf + buf_offset) = swap_le(v);
+        *(doid_t *)(buf + buf_offset) = v;
         buf_offset += sizeof(doid_t);
     }
 
@@ -342,7 +344,7 @@ class Datagram
     void add_zone(const zone_t &v)
     {
         check_add_length(sizeof(zone_t));
-        *(zone_t *)(buf + buf_offset) = swap_le(v);
+        *(zone_t *)(buf + buf_offset) = v;
         buf_offset += sizeof(zone_t);
     }
 
@@ -352,9 +354,9 @@ class Datagram
     void add_location(const doid_t &parent, const zone_t &zone)
     {
         check_add_length(sizeof(doid_t) + sizeof(zone_t));
-        *(doid_t *)(buf + buf_offset) = swap_le(parent);
+        *(doid_t *)(buf + buf_offset) = parent;
         buf_offset += sizeof(doid_t);
-        *(zone_t *)(buf + buf_offset) = swap_le(zone);
+        *(zone_t *)(buf + buf_offset) = zone;
         buf_offset += sizeof(zone_t);
     }
 

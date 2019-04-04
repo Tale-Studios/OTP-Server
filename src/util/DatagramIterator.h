@@ -1,11 +1,6 @@
 #pragma once
 #include "Datagram.h"
-#include "dclass/dc/Struct.h"
-#include "dclass/dc/Method.h"
-#include "dclass/dc/Field.h"
-#include "dclass/dc/Parameter.h"
-#include "dclass/dc/ArrayType.h"
-#include "dclass/dc/NumericType.h"
+#include "dclass/dcClass.h"
 #ifdef _DEBUG
 #include <fstream>
 #endif
@@ -73,7 +68,7 @@ class DatagramIterator
         check_read_length(2);
         int16_t r = *(int16_t*)(m_dg->get_data() + m_offset);
         m_offset += 2;
-        return swap_le(r);
+        return r;
     }
 
     // read_int32 reads 4 bytes from the datagram,
@@ -83,7 +78,7 @@ class DatagramIterator
         check_read_length(4);
         int32_t r = *(int32_t*)(m_dg->get_data() + m_offset);
         m_offset += 4;
-        return swap_le(r);
+        return r;
     }
 
     // read_int64 reads 8 bytes from the datagram,
@@ -93,7 +88,7 @@ class DatagramIterator
         check_read_length(8);
         int64_t r = *(int64_t*)(m_dg->get_data() + m_offset);
         m_offset += 8;
-        return swap_le(r);
+        return r;
     }
 
     // read_uint8 reads a byte from the datagram,
@@ -113,7 +108,7 @@ class DatagramIterator
         check_read_length(2);
         uint16_t r = *(uint16_t*)(m_dg->get_data() + m_offset);
         m_offset += 2;
-        return swap_le(r);
+        return r;
     }
 
     // read_uint32 reads 4 bytes from the datagram,
@@ -123,7 +118,7 @@ class DatagramIterator
         check_read_length(4);
         uint32_t r = *(uint32_t*)(m_dg->get_data() + m_offset);
         m_offset += 4;
-        return swap_le(r);
+        return r;
     }
 
     // read_uint64 reads 8 bytes from the datagram,
@@ -133,7 +128,7 @@ class DatagramIterator
         check_read_length(8);
         uint64_t r = *(uint64_t*)(m_dg->get_data() + m_offset);
         m_offset += 8;
-        return swap_le(r);
+        return r;
     }
 
     // read_size reads a sizetag_t from the datagram.
@@ -142,7 +137,7 @@ class DatagramIterator
         check_read_length(sizeof(sizetag_t));
         sizetag_t r = *(sizetag_t*)(m_dg->get_data() + m_offset);
         m_offset += sizeof(sizetag_t);
-        return swap_le(r);
+        return r;
     }
 
     // read_dgsize reads a dgsize_t from the datagram.
@@ -151,7 +146,7 @@ class DatagramIterator
         check_read_length(sizeof(dgsize_t));
         dgsize_t r = *(dgsize_t*)(m_dg->get_data() + m_offset);
         m_offset += sizeof(dgsize_t);
-        return swap_le(r);
+        return r;
     }
 
     // read_channel reads a channel_t from the datagram.
@@ -160,7 +155,7 @@ class DatagramIterator
         check_read_length(sizeof(channel_t));
         channel_t r = *(channel_t*)(m_dg->get_data() + m_offset);
         m_offset += sizeof(channel_t);
-        return swap_le(r);
+        return r;
     }
 
     // read_doid reads a doid_t from the datagram.
@@ -169,7 +164,7 @@ class DatagramIterator
         check_read_length(sizeof(doid_t));
         doid_t r = *(doid_t*)(m_dg->get_data() + m_offset);
         m_offset += sizeof(doid_t);
-        return swap_le(r);
+        return r;
     }
 
     // read_zone reads a zone_t from the datagram.
@@ -178,7 +173,7 @@ class DatagramIterator
         check_read_length(sizeof(zone_t));
         zone_t r = *(zone_t*)(m_dg->get_data() + m_offset);
         m_offset += sizeof(zone_t);
-        return swap_le(r);
+        return r;
     }
 
     // read_float32 reads 4 bytes from the datagram,
@@ -188,7 +183,7 @@ class DatagramIterator
         check_read_length(4);
         float r = *(float*)(m_dg->get_data() + m_offset);
         m_offset += 4;
-        return swap_le(r);
+        return r;
     }
 
     // read_float64 reads 8 bytes from the datagram,
@@ -198,7 +193,7 @@ class DatagramIterator
         check_read_length(8);
         double r = *(double*)(m_dg->get_data() + m_offset);
         m_offset += 8;
-        return swap_le(r);
+        return r;
     }
 
     // read_string reads a string from the datagram in the format
@@ -243,178 +238,103 @@ class DatagramIterator
     }
 
 
-    // unpack_field accepts a Field of a distributed class
-    //     and returns the packed value for the field.
-    std::vector<uint8_t> unpack_field(const dclass::Field* field)
+    // unpack_field accepts a DCField type and reads the value of the field into a buffer.
+    void unpack_field(DCPackerInterface *field, std::vector<uint8_t> &buffer)
+    {
+        // If field is a fixed-sized type like uint, int, float, etc
+        if(field->has_fixed_byte_size())
+        {
+            std::vector<uint8_t> data = read_data(field->get_fixed_byte_size());
+            buffer.insert(buffer.end(), data.begin(), data.end());
+            return;
+        }
+
+        // If field is a variable-sized type like string, blob, etc type with a "length" prefix
+        size_t length = field->get_num_length_bytes();
+        if(length > 0)
+        {
+            // Read length of field data
+            switch(length)
+            {
+                case 2:
+                {
+                    uint16_t l = read_uint16();
+                    buffer.insert(buffer.end(), (uint8_t*)&l, (uint8_t*)&l + 2);
+                    length = l;
+                }
+                break;
+                case 4:
+                {
+                    uint32_t l = read_uint32();
+                    buffer.insert(buffer.end(), (uint8_t*)&l, (uint8_t*)&l + 4);
+                    length = l;
+                }
+                break;
+            }
+
+            // Read field data into buffer
+            std::vector<uint8_t> data = read_data(length);
+            buffer.insert(buffer.end(), data.begin(), data.end());
+            return;
+        }
+
+        // If field is non-atomic, process each nested field
+        int num_nested = field->get_num_nested_fields();
+        for(int i = 0; i < num_nested; ++i)
+        {
+            unpack_field(field->get_nested_field(i), buffer);
+        }
+    }
+
+    // unpack_field can also be called without a reference to unpack into a new buffer.
+    std::vector<uint8_t> unpack_field(DCPackerInterface *field)
     {
         std::vector<uint8_t> buffer;
         unpack_field(field, buffer);
         return buffer;
     }
 
-    // unpack_field can also be called to read into an existing buffer.
-    void unpack_field(const dclass::Field* field, std::vector<uint8_t> &buffer)
+    // skip_field can be used to seek past the packed field data for a DCField.
+    //     Throws DatagramIteratorEOF if it skips past the end of the datagram.
+    void skip_field(DCPackerInterface *field)
     {
-        unpack_dtype(field->get_type(), buffer);
-    }
-
-    // unpack_dtype accepts a DistributedType and copies the data for the value into a buffer.
-    void unpack_dtype(const dclass::DistributedType* dtype, std::vector<uint8_t> &buffer)
-    {
-        using namespace dclass;
-
-        // For Struct or Method-type fields, any constraints on child fields prevent us from taking the single-read fast-path.
-        // Ergo, their has_range field lets us know whether there are any constraints applicable to their "child" fields.
-        const bool skip_fixed = ((dtype->get_type() == T_STRUCT || dtype->get_type() == T_METHOD) && dtype->has_range());
-
-        if(dtype->has_fixed_size() && !skip_fixed) {
-            const ArrayType* array = dtype->as_array();
-
-            if(dtype->get_type() == T_ARRAY && array && array->get_element_type()->has_range()) {
-                // Slow-path mode:
-                // We have a (slightly unoptimised) edge case to account for here.
-                // unpack_dtype is normally not recursively invoked in the event that we have a fixed-size array with fixed-size elements (T_ARRAY)
-                // Ergo, we have to do this here instead. We more or less effectively lose out the benefits of our single-read optimisation.
-                // Of course, this only applies if the underlying element type has any constraints applying to it in the first place.
-
-                for(size_t i = 0; i < array->get_array_size(); ++i) {
-                    unpack_dtype(array->get_element_type(), buffer);
-                }
-
-                return;
-            }
-
-            // If field is a fixed-sized type like uint, int, float, etc
-            // Also any other type lucky enough to be fixed size will be computed faster
-            const NumericType* num = dtype->as_numeric();
-
-            std::vector<uint8_t> data = read_data(dtype->get_size());
-
-            // Check for any value range constraints applying to fixed-size numerical types:
-            if(num && num->has_range()) {
-                // We do have a value range constraint to check for.
-                if(!num->within_range(&data, 0)) {
-                    std::stringstream error;
-                    error << "Failed to unpack numeric-type field of type " << num->get_alias()
-                          << " due to value range constraint violation";
-                    throw FieldConstraintViolation(error.str());
-                }
-            }
-
-            buffer.insert(buffer.end(), data.begin(), data.end());
-
+        // Skip over fields with fixed byte size
+        if(field->has_fixed_byte_size())
+        {
+            check_read_length(field->get_fixed_byte_size());
+            m_offset += field->get_fixed_byte_size();
             return;
         }
 
-        // For the unlucky types, we have to figure out their size manually
-        switch(dtype->get_type()) {
-        case T_VARSTRING:
-        case T_VARBLOB:
-        case T_VARARRAY: {
-
-            const ArrayType* array = dtype->as_array();
-
-            sizetag_t len = read_size();
-            sizetag_t net_len = swap_le(len);
-
-            uint64_t elem_cnt = 0;
-            buffer.insert(buffer.end(), (uint8_t*)&net_len, (uint8_t*)&net_len + sizeof(sizetag_t));
-
-            if(dtype->get_type() == T_VARARRAY) {
-                // We handle variable-length arrays in a slightly different manner, as we have to check for value constraints.
-                size_t cur_ptr = buffer.size();
-
-                while(buffer.size() - cur_ptr < len) {
-                    unpack_dtype(array->get_element_type(), buffer);
-                    ++elem_cnt;
+        // Skip over fields with variable byte size
+        size_t length = field->get_num_length_bytes();
+        if(length > 0)
+        {
+            // Get length of data
+            switch(length)
+            {
+                case 2:
+                {
+                    length = read_uint16();
                 }
-            } else {
-                // We're dealing with a blob or a string, ergo elem_cnt == len
-                std::vector<uint8_t> data = read_data(len);
-                buffer.insert(buffer.end(), data.begin(), data.end());
-                elem_cnt = len;
+                break;
+                case 4:
+                {
+                    length = read_uint32();
+                }
+                break;
             }
 
-            if(!array->within_range(nullptr, elem_cnt)) {
-                std::stringstream error;
-                error << "Failed to unpack variable-length field of type " << array->get_alias()
-                      << " due to element count constraint violation (got " << elem_cnt << ")";
-                throw FieldConstraintViolation(error.str());
-            }
-
-            break;
-        }
-        case T_STRUCT: {
-            const Struct* dstruct = dtype->as_struct();
-            size_t num_fields = dstruct->get_num_fields();
-            for(unsigned int i = 0; i < num_fields; ++i) {
-                unpack_dtype(dstruct->get_field(i)->get_type(), buffer);
-            }
-            break;
-        }
-        case T_METHOD: {
-            const Method* dmethod = dtype->as_method();
-            size_t num_params = dmethod->get_num_parameters();
-            for(unsigned int i = 0; i < num_params; ++i) {
-                unpack_dtype(dmethod->get_parameter(i)->get_type(), buffer);
-            }
-            break;
-        }
-        default: {
-            // This case should be impossible, but a default is required by compilers
-            break;
-        }
-        }
-    }
-
-    // skip_field can be used to seek past the packed field data for a Field.
-    //     Throws DatagramIteratorEOF if it skips past the end of the datagram.
-    void skip_field(const dclass::Field* field)
-    {
-        skip_dtype(field->get_type());
-    }
-
-    // skip_dtype can be used to seek past the packed data for a DistributedType.
-    //     Throws DatagramIteratorEOF if it skips past the end of the datagram.
-    void skip_dtype(const dclass::DistributedType *dtype)
-    {
-        using namespace dclass;
-        if(dtype->has_fixed_size()) {
-            sizetag_t length = dtype->get_size();
+            // Skip over data
             check_read_length(length);
             m_offset += length;
             return;
         }
-
-        switch(dtype->get_type()) {
-        case T_VARSTRING:
-        case T_VARBLOB:
-        case T_VARARRAY: {
-            sizetag_t length = read_size();
-            check_read_length(length);
-            m_offset += length;
-            break;
-        }
-        case T_STRUCT: {
-            const Struct* dstruct = dtype->as_struct();
-            size_t num_fields = dstruct->get_num_fields();
-            for(unsigned int i = 0; i < num_fields; ++i) {
-                skip_dtype(dstruct->get_field(i)->get_type());
-            }
-            break;
-        }
-        case T_METHOD: {
-            const Method* dmethod = dtype->as_method();
-            size_t num_params = dmethod->get_num_parameters();
-            for(unsigned int i = 0; i < num_params; ++i) {
-                skip_dtype(dmethod->get_parameter(i)->get_type());
-            }
-            break;
-        }
-        default: {
-            // This case should be impossible, but a default is required by compilers
-            break;
-        }
+        // If field is non-atomic, process each nested field
+        int num_nested = field->get_num_nested_fields();
+        for(int i = 0; i < num_nested; ++i)
+        {
+            skip_field(field->get_nested_field(i));
         }
     }
 

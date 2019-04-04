@@ -6,7 +6,7 @@ void OldDatabaseBackend::submit(DBOperation *operation)
     std::lock_guard<std::mutex> lock(m_submit_lock);
     switch(operation->type()) {
     case DBOperation::OperationType::CREATE_OBJECT: {
-        ObjectData dbo(operation->dclass()->get_id());
+        ObjectData dbo(operation->dclass()->get_number());
         dbo.fields = operation->set_fields();
 
         doid_t doid = create_object(dbo);
@@ -32,7 +32,7 @@ void OldDatabaseBackend::submit(DBOperation *operation)
             return;
         }
 
-        const dclass::Class *dclass = g_dcf->get_class_by_id(dbo.dc_id);
+        DCClass *dclass = g_dcf->get_class(dbo.dc_id);
         if(!dclass || !operation->verify_class(dclass)) {
             operation->on_failure();
             return;
@@ -48,7 +48,7 @@ void OldDatabaseBackend::submit(DBOperation *operation)
     break;
     case DBOperation::OperationType::SET_FIELDS: {
         // Check the object's class and fields
-        const dclass::Class *dclass = get_class(operation->doid());
+        DCClass *dclass = get_class(operation->doid());
         if(!dclass || !operation->verify_class(dclass)) {
             operation->on_failure();
             return;
@@ -76,7 +76,7 @@ void OldDatabaseBackend::submit(DBOperation *operation)
         }
 
         // Make sure all the fields are valid for the class
-        const dclass::Class *dclass = g_dcf->get_class_by_id(dbo.dc_id);
+        DCClass *dclass = g_dcf->get_class(dbo.dc_id);
         if(!dclass || !operation->verify_class(dclass)) {
             operation->on_failure();
             return;

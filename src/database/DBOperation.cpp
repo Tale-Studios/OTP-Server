@@ -5,8 +5,6 @@
 #include "core/msgtypes.h"
 #include "DatabaseServer.h"
 using namespace std;
-using dclass::Field;
-using dclass::Class;
 
 void DBOperation::cleanup()
 {
@@ -39,7 +37,7 @@ void DBOperation::announce_fields(const FieldValues& fields)
             update->add_uint16(deleted_fields.size());
         }
         for(auto it = deleted_fields.begin(); it != deleted_fields.end(); ++it) {
-            update->add_uint16((*it)->get_id());
+            update->add_uint16((*it)->get_number());
         }
         m_dbserver->route_datagram(update);
     }
@@ -56,19 +54,19 @@ void DBOperation::announce_fields(const FieldValues& fields)
             update->add_uint16(changed_fields.size());
         }
         for(auto it = changed_fields.begin(); it != changed_fields.end(); ++it) {
-            update->add_uint16(it->first->get_id());
+            update->add_uint16(it->first->get_number());
             update->add_data(it->second);
         }
         m_dbserver->route_datagram(update);
     }
 }
 
-bool DBOperation::verify_fields(const dclass::Class *dclass, const FieldSet& fields)
+bool DBOperation::verify_fields(DCClass *dclass, const FieldSet& fields)
 {
     bool valid = true;
     for(auto it = fields.begin(); it != fields.end(); ++it) {
-        const dclass::Field *field = *it;
-        if(!dclass->get_field_by_id(field->get_id())) {
+        DCField *field = *it;
+        if(!dclass->get_field_by_index(field->get_number())) {
             m_dbserver->m_log->warning() << "Field " << field->get_name()
                                          << " does not belong to object " << m_doid
                                          << "(" << dclass->get_name() << ")\n";
@@ -78,11 +76,11 @@ bool DBOperation::verify_fields(const dclass::Class *dclass, const FieldSet& fie
     return valid;
 }
 
-bool DBOperation::verify_fields(const dclass::Class *dclass, const FieldValues& fields)
+bool DBOperation::verify_fields(DCClass *dclass, const FieldValues& fields)
 {
     bool valid = true;
     for(auto it = fields.begin(); it != fields.end(); ++it) {
-        if(!dclass->get_field_by_id(it->first->get_id())) {
+        if(!dclass->get_field_by_index(it->first->get_number())) {
             m_dbserver->m_log->warning() << "Field " << it->first->get_name()
                                          << " does not belong to object " << m_doid
                                          << "(" << dclass->get_name() << ")\n";
@@ -97,14 +95,14 @@ bool DBOperation::populate_set_fields(DatagramIterator &dgi, uint16_t field_coun
 {
     for(uint16_t i = 0; i < field_count; ++i) {
         uint16_t field_id = dgi.read_uint16();
-        const Field *field = g_dcf->get_field_by_id(field_id);
+        DCField *field = g_dcf->get_field_by_index(field_id);
         if(!field) {
             m_dbserver->m_log->error() << "Create/modify field request included invalid field #"
                                        << field_id << "\n";
             return false;
         }
 
-        if(field->has_keyword("db")) {
+        if(field->is_db()) {
             try {
                 // Get criteria value
                 if(check_values) {
@@ -155,7 +153,7 @@ bool DBOperation::populate_get_fields(DatagramIterator &dgi, uint16_t field_coun
     for(uint16_t i = 0; i < field_count; ++i) {
         // Read the field from the datagram
         uint16_t field_id = dgi.read_uint16();
-        const Field *field = g_dcf->get_field_by_id(field_id);
+        DCField *field = g_dcf->get_field_by_index(field_id);
         if(!field) {
             m_dbserver->m_log->error() << "Get field request included invalid field #"
                                        << field_id << "\n";
@@ -163,7 +161,7 @@ bool DBOperation::populate_get_fields(DatagramIterator &dgi, uint16_t field_coun
         }
 
         // Add the field to the fields we want to get from the database
-        if(field->has_keyword("db"))
+        if(field->is_db())
             m_get_fields.insert(field);
         else
             m_dbserver->m_log->error() << "Get field request included non-DB field "
@@ -182,7 +180,7 @@ bool DBOperationCreate::initialize(channel_t sender, uint16_t, DatagramIterator 
     m_context = dgi.read_uint32();
 
     uint16_t dclass_id = dgi.read_uint16();
-    m_dclass = g_dcf->get_class_by_id(dclass_id);
+    m_dclass = g_dcf->get_class(dclass_id);
     if(!m_dclass) {
         m_dbserver->m_log->error() << "Create object request for invalid dclass ID #"
                                    << dclass_id << "\n";
@@ -199,7 +197,7 @@ bool DBOperationCreate::initialize(channel_t sender, uint16_t, DatagramIterator 
     // Make sure that all present fields actually belong to the dclass.
     bool errors = false;
     for(auto it = m_set_fields.begin(); it != m_set_fields.end(); ++it) {
-        if(!m_dclass->get_field_by_id(it->first->get_id())) {
+        if(!m_dclass->get_field_by_index(it->first->get_number())) {
             m_dbserver->m_log->warning() << "Attempted to create object "
                                          << m_dclass->get_name()
                                          << " which includes non-belonging field: "
@@ -213,9 +211,9 @@ bool DBOperationCreate::initialize(channel_t sender, uint16_t, DatagramIterator 
     }
 
     // Set all non-present fields to defaults (if they exist)
-    for(unsigned int i = 0; i < m_dclass->get_num_fields(); ++i) {
-        const dclass::Field *field = m_dclass->get_field(i);
-        if(field->has_default_value() && field->has_keyword("db")
+    for(unsigned int i = 0; i < m_dclass->get_num_inherited_fields(); ++i) {
+        DCField *field = m_dclass->get_inherited_field(i);
+        if(field->has_default_value() && field->is_db()
            && m_set_fields.find(field) == m_set_fields.end()) {
             string val = field->get_default_value();
             m_set_fields[field] = vector<uint8_t>(val.begin(), val.end());
@@ -296,7 +294,7 @@ bool DBOperationGet::initialize(channel_t sender, uint16_t msg_type, DatagramIte
     return populate_get_fields(dgi, field_count);
 }
 
-bool DBOperationGet::verify_class(const dclass::Class *dclass)
+bool DBOperationGet::verify_class(DCClass *dclass)
 {
     // If request is of type GET_OBJECT don't expect a class, so no need to verify it.
     if(m_type == GET_OBJECT) {
@@ -418,7 +416,7 @@ void DBOperationGet::on_complete(DBObjectSnapshot *snapshot)
             return;
         }
 
-        resp->add_uint16(response_fields.begin()->first->get_id());
+        resp->add_uint16(response_fields.begin()->first->get_number());
         resp->add_data(response_fields.begin()->second);
 
         // And that's it. We're done.
@@ -429,12 +427,12 @@ void DBOperationGet::on_complete(DBObjectSnapshot *snapshot)
     }
 
     if(m_resp_msgtype == DBSERVER_OBJECT_GET_ALL_RESP) {
-        resp->add_uint16(snapshot->m_dclass->get_id());
+        resp->add_uint16(snapshot->m_dclass->get_number());
     }
 
     resp->add_uint16(response_fields.size());
     for(auto it = response_fields.begin(); it != response_fields.end(); ++it) {
-        resp->add_uint16(it->first->get_id());
+        resp->add_uint16(it->first->get_number());
         resp->add_data(it->second);
     }
 
@@ -471,7 +469,7 @@ bool DBOperationSet::initialize(channel_t sender, uint16_t msg_type, DatagramIte
     return true;
 }
 
-bool DBOperationSet::verify_class(const dclass::Class *dclass)
+bool DBOperationSet::verify_class(DCClass *dclass)
 {
     if(!verify_fields(dclass, m_set_fields)) {
         m_dbserver->m_log->warning() << "Attempted to modify invalid field for " << m_doid
@@ -579,7 +577,7 @@ bool DBOperationUpdate::initialize(channel_t sender, uint16_t msg_type, Datagram
     return true;
 }
 
-bool DBOperationUpdate::verify_class(const dclass::Class *dclass)
+bool DBOperationUpdate::verify_class(DCClass *dclass)
 {
     bool errors = false;
     if(!verify_fields(dclass, m_set_fields)) {
@@ -692,7 +690,7 @@ void DBOperationUpdate::on_criteria_mismatch(DBObjectSnapshot *snapshot)
     }
 
     for(auto it = mismatched_fields.begin(); it != mismatched_fields.end(); ++it) {
-        resp->add_uint16(it->first->get_id());
+        resp->add_uint16(it->first->get_number());
         resp->add_data(it->second);
     }
 

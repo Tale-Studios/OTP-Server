@@ -17,35 +17,33 @@ install:
 - set CMAKE_INCLUDE_PATH=%CMAKE_INCLUDE_PATH%;%CD%
 - cd ..
 # build mongoc
-- appveyor DownloadFile https://github.com/mongodb/mongo-c-driver/archive/1.13.0.zip -FileName mongo-c-driver.zip
-- 7z x mongo-c-driver.zip
-- cd mongo-c-driver-1.13.0
+- appveyor DownloadFile https://github.com/mongodb/mongo-c-driver/archive/1.10.2.zip -FileName mongo-c-driver-1.10.2.zip
+- 7z x mongo-c-driver-1.10.2.zip
+- cd mongo-c-driver-1.10.2
 - cmake -G"Visual Studio 14 2015 Win64" -DCMAKE_INSTALL_PREFIX=C:\libraries\mongoc -DENABLE_SSL=OFF -DENABLE_TESTS=OFF
 - msbuild /p:Configuration=Release ALL_BUILD.vcxproj
 - msbuild /p:Configuration=Release INSTALL.vcxproj
 - cd ..
 # build mongo-cxx-driver
-- appveyor DownloadFile https://github.com/mongodb/mongo-cxx-driver/archive/r3.4.0.zip -FileName mongo-cxx-driver.zip
-- 7z x mongo-cxx-driver.zip
-- cd mongo-cxx-driver-r3.4.0\build
+- git clone --branch releases/stable https://github.com/mongodb/mongo-cxx-driver
+- cd mongo-cxx-driver\build
 - cmake -G"Visual Studio 14 2015 Win64" -DCMAKE_INSTALL_PREFIX=C:\libraries\mongo-cxx-driver -DCMAKE_PREFIX_PATH=C:\libraries\mongoc -DLIBMONGOC_DIR=C:\libraries\mongoc ..
 - msbuild /p:Configuration=Release ALL_BUILD.vcxproj
 - msbuild /p:Configuration=Release INSTALL.vcxproj
 - cd ..\..\
 # build libuv
-- appveyor DownloadFile https://github.com/libuv/libuv/archive/v1.24.0.zip -FileName libuv.zip
-- 7z x libuv.zip
-- cd libuv-1.24.0
+- git clone -b v1.x https://github.com/libuv/libuv
+- cd libuv
 - vcbuild release shared x64
 - cd ..\..\
 - set CMAKE_PREFIX_PATH=%CMAKE_PREFIX_PATH%;C:\libraries\mongo-cxx-driver
 
 build_script:
 - cd build
-- cmake -G"Visual Studio 14 2015 Win64" -DCMAKE_INSTALL_PREFIX=C:\libraries\mongo-cxx-driver -DCMAKE_PREFIX_PATH=C:\libraries\mongoc;C:\projects\astron\dependencies\libuv-1.24.0;C:\projects\astron\dependencies\libuv-1.24.0\Release -DCMAKE_BUILD_TYPE=Release ..
+- cmake -G"Visual Studio 14 2015 Win64" -DCMAKE_INSTALL_PREFIX=C:\libraries\mongo-cxx-driver -DCMAKE_PREFIX_PATH=C:\libraries\mongoc;C:\projects\astron\dependencies\libuv;C:\projects\astron\dependencies\libuv\Release -DCMAKE_BUILD_TYPE=Release ..
 - msbuild /p:Configuration=Release ALL_BUILD.vcxproj
 - cd Release
-- copy /Y C:\projects\astron\dependencies\libuv-1.24.0\Release\*.dll .
+- copy /Y C:\projects\astron\dependencies\libuv\Release\*.dll .
 - copy /Y C:\libraries\mongoc\bin\*.dll .
 - copy /Y C:\libraries\mongo-cxx-driver\bin\*.dll .
 - 7z a astron.zip *

@@ -2,9 +2,6 @@
 #include "shutdown.h"
 #include "RoleFactory.h"
 #include "config/constraints.h"
-#include "dclass/file/read.h"
-#include "dclass/dc/Class.h"
-using dclass::Class;
 
 #include <cstring>
 #include <string>  // std::string
@@ -65,7 +62,7 @@ int main(int argc, char *argv[])
     // We need to ignore SIGPIPE issues ourselves for Linux (libuv issue #1254)
     signal(SIGPIPE, SIG_IGN);
 #endif
- 
+
     int config_arg_index = -1;
     cfg_file = "astrond.yml";
     LogSeverity sev = g_logger->get_min_severity();
@@ -192,25 +189,15 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    dclass::File* dcf = new dclass::File();
-    dcf->add_keyword("required");
-    dcf->add_keyword("ram");
-    dcf->add_keyword("db");
-    dcf->add_keyword("broadcast");
-    dcf->add_keyword("clrecv");
-    dcf->add_keyword("clsend");
-    dcf->add_keyword("ownsend");
-    dcf->add_keyword("ownrecv");
-    dcf->add_keyword("airecv");
-    vector<string> dc_file_names = dc_files.get_val();
-    for(auto it = dc_file_names.begin(); it != dc_file_names.end(); ++it) {
-        bool ok = dclass::append(dcf, *it);
-        if(!ok) {
-            mainlog.fatal() << "Could not read DC file " << *it << endl;
+    std::vector<std::string> dc_file_names = dc_files.get_val();
+    for(auto it = dc_file_names.begin(); it != dc_file_names.end(); ++it)
+    {
+        if(!g_dcf->read(*it))
+        {
+            mainlog.fatal() << "Could not read DC file " << *it << std::endl;
             return 1;
         }
     }
-    g_dcf = dcf;
 
     // Now hook up our speciailize signal handler
     astron_handle_signals();
@@ -229,8 +216,8 @@ int main(int argc, char *argv[])
                 Uberdog ud;
 
                 // Get the uberdog's class
-                const Class* dcc = g_dcf->get_class_by_name(udnode["class"].as<std::string>());
-                if(!dcc) {
+                ud.dcc = g_dcf->get_class_by_name(udnode["class"].as<std::string>());
+                if(!ud.dcc) {
                     // Make sure it exists
                     mainlog.fatal() << "For uberdog " << udnode["id"].as<doid_t>()
                                     << " Distributed class " << udnode["class"].as<std::string>()
@@ -239,7 +226,6 @@ int main(int argc, char *argv[])
                 }
 
                 // Setup uberdog
-                ud.dcc = dcc;
                 ud.anonymous = udnode["anonymous"].as<bool>();
                 g_uberdogs[udnode["id"].as<doid_t>()] = ud;
             }
@@ -368,9 +354,9 @@ void printCompiledOptions(ostream &s)
 #if defined(_MSC_VER) && (_MSC_VER < 1900)
 struct VS2013_threading_fix
 {
-	VS2013_threading_fix()
-	{
-		_Cnd_do_broadcast_at_thread_exit();
-	}
+    VS2013_threading_fix()
+    {
+        _Cnd_do_broadcast_at_thread_exit();
+    }
 } threading_fix;
 #endif

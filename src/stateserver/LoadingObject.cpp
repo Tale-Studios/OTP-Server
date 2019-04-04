@@ -1,12 +1,9 @@
 #include "core/global.h"
 #include "core/msgtypes.h"
-#include "dclass/dc/Class.h"
-#include "dclass/dc/Field.h"
+#include "dclass/dcClass.h"
+#include "dclass/dcField.h"
 
 #include "LoadingObject.h"
-
-using dclass::Class;
-using dclass::Field;
 
 LoadingObject::LoadingObject(DBStateServer *stateserver, doid_t do_id,
                              doid_t parent_id, zone_t zone_id,
@@ -24,7 +21,7 @@ LoadingObject::LoadingObject(DBStateServer *stateserver, doid_t do_id,
 }
 
 LoadingObject::LoadingObject(DBStateServer *stateserver, doid_t do_id, doid_t parent_id,
-                             zone_t zone_id, const Class *dclass, DatagramIterator &dgi,
+                             zone_t zone_id, DCClass *dclass, DatagramIterator &dgi,
                              const std::unordered_set<uint32_t> &contexts) :
     m_dbss(stateserver), m_do_id(do_id), m_parent_id(parent_id), m_zone_id(zone_id),
     m_context(stateserver->m_next_context++), m_dclass(dclass), m_valid_contexts(contexts),
@@ -40,14 +37,14 @@ LoadingObject::LoadingObject(DBStateServer *stateserver, doid_t do_id, doid_t pa
     uint16_t field_count = dgi.read_uint16();
     for(uint16_t i{}; i < field_count; ++i) {
         uint16_t field_id = dgi.read_uint16();
-        const Field *field = m_dclass->get_field_by_id(field_id);
+        DCField *field = m_dclass->get_field_by_index(field_id);
 
         if(!field) {
             m_log->error() << "Received invalid field index " << field_id << std::endl;
             return;
         }
 
-        if(field->has_keyword("ram") || field->has_keyword("required")) {
+        if(field->is_ram() || field->is_required()) {
             dgi.unpack_field(field, m_field_updates[field]);
         } else {
             m_log->error() << "Received non-RAM field " << field->get_name()
@@ -146,7 +143,7 @@ void LoadingObject::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
         }
 
         uint16_t dc_id = dgi.read_uint16();
-        const Class *r_dclass = g_dcf->get_class_by_id(dc_id);
+        DCClass *r_dclass = g_dcf->get_class(dc_id);
         if(!r_dclass) {
             m_log->error() << "Received object from database with unknown dclass"
                            << " - id:" << dc_id << std::endl;
@@ -155,7 +152,7 @@ void LoadingObject::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
         }
 
         if(m_dclass && r_dclass != m_dclass) {
-            m_log->error() << "Requested object of class '" << m_dclass->get_id()
+            m_log->error() << "Requested object of class '" << m_dclass->get_number()
                            << "', but received class " << dc_id << std::endl;
             finalize();
             break;
@@ -169,18 +166,18 @@ void LoadingObject::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
         }
 
         // Add default values and updated values
-        std::size_t dcc_field_count = r_dclass->get_num_fields();
+        std::size_t dcc_field_count = r_dclass->get_num_inherited_fields();
         for(std::size_t i{}; i < dcc_field_count; ++i) {
-            const Field *field = r_dclass->get_field(i);
-            if(!field->as_molecular()) {
-                if(field->has_keyword("required")) {
+            DCField *field = r_dclass->get_inherited_field(i);
+            if(!field->as_molecular_field()) {
+                if(field->is_required()) {
                     if(m_field_updates.find(field) != m_field_updates.end()) {
                         m_required_fields[field] = m_field_updates[field];
                     } else if(m_required_fields.find(field) == m_required_fields.end()) {
                         std::string val = field->get_default_value();
                         m_required_fields[field] = std::vector<uint8_t>(val.begin(), val.end());
                     }
-                } else if(field->has_keyword("ram")) {
+                } else if(field->is_ram()) {
                     if(m_field_updates.find(field) != m_field_updates.end()) {
                         m_ram_fields[field] = m_field_updates[field];
                     }

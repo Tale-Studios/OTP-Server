@@ -1,14 +1,12 @@
 #include "core/global.h"
 #include "core/msgtypes.h"
 #include "config/constraints.h"
-#include "dclass/dc/Class.h"
+#include "dclass/dcClass.h"
 #include <exception>
 #include <stdexcept>
 
 #include "DistributedObject.h"
 #include "StateServer.h"
-
-using dclass::Class;
 
 static RoleConfigGroup stateserver_config("stateserver");
 static ConfigVariable<channel_t> control_channel("control", INVALID_CHANNEL, stateserver_config);
@@ -43,7 +41,7 @@ void StateServer::handle_generate(DatagramIterator &dgi, bool has_other)
     }
 
     // Make sure the class exists in the file
-    const Class *dc_class = g_dcf->get_class_by_id(dc_id);
+    DCClass *dc_class = g_dcf->get_class(dc_id);
     if(!dc_class) {
         m_log->error() << "Received create for unknown dclass with class id '" << dc_id << "'\n";
         return;

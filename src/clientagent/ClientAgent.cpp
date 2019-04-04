@@ -5,7 +5,6 @@
 #include "core/shutdown.h"
 #include "core/RoleFactory.h"
 #include "config/constraints.h"
-#include "dclass/file/hash.h"
 #include "net/TcpAcceptor.h"
 using namespace std;
 
@@ -60,7 +59,7 @@ ClientAgent::ClientAgent(RoleConfig roleconfig) : Role(roleconfig), m_net_accept
     if(config_hash > 0x0) {
         m_hash = config_hash;
     } else {
-        m_hash = dclass::legacy_hash(g_dcf);
+        m_hash = g_dcf->get_hash();
     }
 
     // Load tuning parameters.

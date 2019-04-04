@@ -6,13 +6,11 @@
 #include "core/global.h"
 #include "core/msgtypes.h"
 #include "config/constraints.h"
-#include "dclass/dc/Class.h"
-#include "dclass/dc/Field.h"
+#include "dclass/dcClass.h"
+#include "dclass/dcField.h"
 #include "util/Timeout.h"
 
 using namespace std;
-using dclass::Class;
-using dclass::Field;
 
 
 static ConfigGroup astronclient_config("libastron", ca_client_config);
@@ -502,7 +500,7 @@ class AstronClient : public Client, public NetworkHandler
         uint16_t field_id = dgi.read_uint16();
 
         // Get class of object from cache
-        const Class *dcc = lookup_object(do_id);
+        DCClass *dcc = lookup_object(do_id);
 
         // If the class couldn't be found, error out:
         if(!dcc) {
@@ -534,7 +532,7 @@ class AstronClient : public Client, public NetworkHandler
         }
 
         // Check that the client sent a field that actually exists in the class.
-        const Field *field = dcc->get_field_by_id(field_id);
+        DCField *field = dcc->get_field_by_index(field_id);
         if(!field) {
             stringstream ss;
             ss << "Client tried to send update for nonexistent field " << field_id << " to object "

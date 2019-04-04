@@ -27,7 +27,7 @@ enum ClientState {
 
 struct DeclaredObject {
     doid_t id;
-    const dclass::Class *dcc;
+    DCClass *dcc;
 };
 
 // An OwnedObject is used to cache metadata associated with
@@ -157,7 +157,7 @@ class Client : public MDParticipantInterface
 
     // lookup_object returns the class of the object with a do_id.
     // If that object is not visible to the client, nullptr will be returned instead.
-    const dclass::Class* lookup_object(doid_t do_id);
+    DCClass* lookup_object(doid_t do_id);
 
     // lookup_interests returns a list of all the interests that a parent-zone pair is visible to.
     std::vector<Interest> lookup_interests(doid_t parent_id, zone_t zone_id);

@@ -14,7 +14,7 @@ class DatabaseServer;
 class DBObjectSnapshot
 {
   public:
-    const dclass::Class *m_dclass;
+    DCClass *m_dclass;
 
     // Absense from this map indicates that the field is either not present
     // on the object, or was not requested by the corresponding DBOperation.
@@ -79,7 +79,7 @@ class DBOperation
     }
 
     // dclass returns the class for a create object operation [only: CREATE_OBJECT]
-    const dclass::Class *dclass() const
+    DCClass *dclass() const
     {
         return m_dclass;
     }
@@ -120,7 +120,7 @@ class DBOperation
     //
     // This function handles logging, so the backend need not report when
     // false is returned.
-    virtual bool verify_class(const dclass::Class *)
+    virtual bool verify_class(DCClass *)
     {
         return true;
     }
@@ -190,7 +190,7 @@ class DBOperation
     // m_doid MUST be present for all operations except CREATE_OBJECT.
     doid_t m_doid;
     // m_dclass MUST be present for CREATE_OBJECT.
-    const dclass::Class *m_dclass;
+    DCClass *m_dclass;
     // The fields that the frontend is requesting. Only used in GET_FIELDS operations.
     FieldSet m_get_fields;
     // The fields that the frontend wants us to change.
@@ -199,8 +199,8 @@ class DBOperation
     FieldValues m_criteria_fields;
 
     void cleanup();
-    bool verify_fields(const dclass::Class *dclass, const FieldSet& fields);
-    bool verify_fields(const dclass::Class *dclass, const FieldValues& fields);
+    bool verify_fields(DCClass *dclass, const FieldSet& fields);
+    bool verify_fields(DCClass *dclass, const FieldValues& fields);
     void announce_fields(const FieldValues& fields);
     bool populate_set_fields(DatagramIterator &dgi, uint16_t field_count,
                              bool deletes = false, bool values = false);
@@ -231,7 +231,7 @@ class DBOperationGet : public DBOperation
   public:
     DBOperationGet(DatabaseServer *db) : DBOperation(db) { }
     virtual bool initialize(channel_t sender, uint16_t msg_type, DatagramIterator &dgi);
-    virtual bool verify_class(const dclass::Class *dclass);
+    virtual bool verify_class(DCClass *dclass);
     virtual bool is_independent_of(const DBOperation *other) const;
     virtual void on_complete(DBObjectSnapshot *snapshot);
     virtual void on_failure();
@@ -245,7 +245,7 @@ class DBOperationSet : public DBOperation
   public:
     DBOperationSet(DatabaseServer *db) : DBOperation(db) { }
     virtual bool initialize(channel_t sender, uint16_t msg_type, DatagramIterator &dgi);
-    virtual bool verify_class(const dclass::Class *dclass);
+    virtual bool verify_class(DCClass *dclass);
     virtual bool is_independent_of(const DBOperation *other) const;
     virtual void on_complete();
     virtual void on_failure();
@@ -255,7 +255,7 @@ class DBOperationUpdate : public DBOperation
   public:
     DBOperationUpdate(DatabaseServer *db) : DBOperation(db) { }
     virtual bool initialize(channel_t sender, uint16_t msg_type, DatagramIterator &dgi);
-    virtual bool verify_class(const dclass::Class *dclass);
+    virtual bool verify_class(DCClass *dclass);
     virtual bool is_independent_of(const DBOperation *other) const;
     virtual void on_complete();
     virtual void on_failure();

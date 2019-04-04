@@ -1,7 +1,7 @@
 #pragma once
 #include "Logger.h"
 #include "config/ConfigVariable.h"
-#include "dclass/dc/File.h"
+#include "dclass/dcFile.h"
 #include "util/EventSender.h"
 #include "util/TaskQueue.h"
 #include "deps/uvw/uvw.hpp"
@@ -16,11 +16,11 @@
 //     similar to how an AI server would be connected.
 struct Uberdog {
     doid_t do_id;
-    const dclass::Class *dcc;
+    DCClass *dcc;
     bool anonymous;
 };
 
-extern const dclass::File *g_dcf;
+extern DCFile *g_dcf;
 extern std::unique_ptr<Logger> g_logger;
 extern std::unique_ptr<ConfigFile> g_config;
 extern EventSender g_eventsender;

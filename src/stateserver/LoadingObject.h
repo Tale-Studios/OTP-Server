@@ -11,7 +11,7 @@ class LoadingObject final : public MDParticipantInterface
     LoadingObject(DBStateServer *stateserver, doid_t do_id, doid_t parent_id, zone_t zone_id,
                   const std::unordered_set<uint32_t> &contexts = std::unordered_set<uint32_t>());
     LoadingObject(DBStateServer *stateserver, doid_t do_id, doid_t parent_id, zone_t zone_id,
-                  const dclass::Class *dclass, DatagramIterator &dgi,
+                  DCClass *dclass, DatagramIterator &dgi,
                   const std::unordered_set<uint32_t> &contexts = std::unordered_set<uint32_t>());
 
     void begin();
@@ -25,10 +25,10 @@ class LoadingObject final : public MDParticipantInterface
     std::unique_ptr<LogCategory> m_log;
 
     // Upstream object data
-    const dclass::Class *m_dclass;
-    UnorderedFieldValues m_field_updates;
-    UnorderedFieldValues m_required_fields;
-    FieldValues m_ram_fields;
+    DCClass *m_dclass;
+    std::unordered_map<DCField*, std::vector<uint8_t> > m_field_updates;
+    std::unordered_map<DCField*, std::vector<uint8_t> > m_required_fields;
+    std::map<DCField*, std::vector<uint8_t> > m_ram_fields;
     std::unordered_set<uint32_t> m_valid_contexts;
 
     // Received datagrams while waiting for reply

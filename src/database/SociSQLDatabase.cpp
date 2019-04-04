@@ -4,17 +4,14 @@
 
 #include "core/global.h"
 #include "core/shutdown.h"
-#include "dclass/value/parse.h"
-#include "dclass/value/format.h"
-#include "dclass/dc/Class.h"
-#include "dclass/dc/Field.h"
+#include "dclass/dcClass.h"
+#include "dclass/dcField.h"
 
 #include <soci.h>
 #include <boost/icl/interval_set.hpp>
 
 using namespace std;
 using namespace soci;
-using namespace dclass;
 
 typedef boost::icl::discrete_interval<doid_t> interval_t;
 typedef boost::icl::interval_set<doid_t> set_t;
@@ -60,7 +57,7 @@ class SociSQLDatabase : public OldDatabaseBackend
     {
         string field_name;
         vector<uint8_t> field_value;
-        const Class *dcc = g_dcf->get_class_by_id(dbo.dc_id);
+        DCClass *dcc = g_dcf->get_class(dbo.dc_id);
         bool storable = is_storable(dbo.dc_id);
 
         doid_t do_id = pop_next_id();
@@ -91,11 +88,11 @@ class SociSQLDatabase : public OldDatabaseBackend
     virtual void delete_object(doid_t do_id)
     {
         bool storable = false;
-        const Class* dcc = get_class(do_id);
+        DCClass* dcc = get_class(do_id);
         if(dcc) {
             // Note: needs to be called outside the transaction so it doesn't prevent deletion
             //       of the object in the `objects` table
-            storable = is_storable(dcc->get_id());
+            storable = is_storable(dcc->get_number());
         }
 
         m_log->debug() << "Deleting object with id " << do_id << "..." << endl;
@@ -113,20 +110,20 @@ class SociSQLDatabase : public OldDatabaseBackend
         m_log->trace() << "Getting object with id" << do_id << endl;
 
         // Get class from the objects table
-        const Class* dcc = get_class(do_id);
+        DCClass* dcc = get_class(do_id);
         if(!dcc) {
             return false; // Object does not exist
         }
-        dbo.dc_id = dcc->get_id();
+        dbo.dc_id = dcc->get_number();
 
-        bool stored = is_storable(dcc->get_id());
+        bool stored = is_storable(dcc->get_number());
         if(stored) {
             get_all_from_table(do_id, dcc, dbo.fields);
         }
 
         return true;
     }
-    virtual const Class* get_class(doid_t do_id)
+    virtual DCClass* get_class(doid_t do_id)
     {
         int dc_id = -1;
         indicator ind;
@@ -141,12 +138,12 @@ class SociSQLDatabase : public OldDatabaseBackend
             return nullptr;
         }
 
-        return g_dcf->get_class_by_id(dc_id);
+        return g_dcf->get_class(dc_id);
     }
-    virtual void del_field(doid_t do_id, const Field* field)
+    virtual void del_field(doid_t do_id, DCField* field)
     {
-        const Class *dcc = get_class(do_id);
-        bool storable = is_storable(dcc->get_id());
+        DCClass *dcc = get_class(do_id);
+        bool storable = is_storable(dcc->get_number());
 
         if(storable) {
             FieldList fields;
@@ -156,17 +153,17 @@ class SociSQLDatabase : public OldDatabaseBackend
     }
     virtual void del_fields(doid_t do_id, const FieldList &fields)
     {
-        const Class *dcc = get_class(do_id);
-        bool storable = is_storable(dcc->get_id());
+        DCClass *dcc = get_class(do_id);
+        bool storable = is_storable(dcc->get_number());
 
         if(storable) {
             del_fields_in_table(do_id, dcc, fields);
         }
     }
-    virtual void set_field(doid_t do_id, const Field* field, const vector<uint8_t> &value)
+    virtual void set_field(doid_t do_id, DCField* field, const vector<uint8_t> &value)
     {
-        const Class *dcc = get_class(do_id);
-        bool storable = is_storable(dcc->get_id());
+        DCClass *dcc = get_class(do_id);
+        bool storable = is_storable(dcc->get_number());
 
         if(storable) {
             FieldValues fields;
@@ -182,8 +179,8 @@ class SociSQLDatabase : public OldDatabaseBackend
     }
     virtual void set_fields(doid_t do_id, const FieldValues &fields)
     {
-        const Class *dcc = get_class(do_id);
-        bool storable = is_storable(dcc->get_id());
+        DCClass *dcc = get_class(do_id);
+        bool storable = is_storable(dcc->get_number());
 
         if(storable) {
             try {
@@ -195,16 +192,16 @@ class SociSQLDatabase : public OldDatabaseBackend
             }
         }
     }
-    virtual bool set_field_if_empty(doid_t do_id, const Field* field, vector<uint8_t> &value)
+    virtual bool set_field_if_empty(doid_t do_id, DCField* field, vector<uint8_t> &value)
     {
         // Get class from the objects table
-        const Class* dcc = get_class(do_id);
+        DCClass* dcc = get_class(do_id);
         if(!dcc) {
             value.clear();
             return false; // Object does not exist
         }
 
-        bool stored = is_storable(dcc->get_id());
+        bool stored = is_storable(dcc->get_number());
         if(!stored) {
             value.clear();
             return false; // Class has no database fields
@@ -239,13 +236,13 @@ class SociSQLDatabase : public OldDatabaseBackend
     virtual bool set_fields_if_empty(doid_t do_id, FieldValues &values)
     {
         // Get class from the objects table
-        const Class* dcc = get_class(do_id);
+        DCClass* dcc = get_class(do_id);
         if(!dcc) {
             values.clear();
             return false; // Object does not exist
         }
 
-        bool stored = is_storable(dcc->get_id());
+        bool stored = is_storable(dcc->get_number());
         if(!stored) {
             values.clear();
             return false; // Class has no database fields
@@ -257,7 +254,7 @@ class SociSQLDatabase : public OldDatabaseBackend
         try {
             m_sql.begin(); // Start transaction
             for(auto it = values.begin(); it != values.end(); ++it) {
-                const Field* field = it->first;
+                DCField* field = it->first;
                 if(field->has_keyword("db")) {
                     m_sql << "SELECT " << field->get_name() << " FROM fields_" << dcc->get_name()
                           << " WHERE object_id=" << do_id << ";", into(value, ind);
@@ -292,16 +289,16 @@ class SociSQLDatabase : public OldDatabaseBackend
         }
         return true;
     }
-    virtual bool set_field_if_equals(doid_t do_id, const Field* field,
+    virtual bool set_field_if_equals(doid_t do_id, DCField* field,
                                      const vector<uint8_t> &equal, vector<uint8_t> &value)
     {
         // Get class from the objects table
-        const Class* dcc = get_class(do_id);
+        DCClass* dcc = get_class(do_id);
         if(!dcc) {
             return false; // Object does not exist
         }
 
-        bool stored = is_storable(dcc->get_id());
+        bool stored = is_storable(dcc->get_number());
         if(!stored) {
             return false; // Class has no database fields
         }
@@ -341,12 +338,12 @@ class SociSQLDatabase : public OldDatabaseBackend
                                       FieldValues &values)
     {
         // Get class from the objects table
-        const Class* dcc = get_class(do_id);
+        DCClass* dcc = get_class(do_id);
         if(!dcc) {
             return false; // Object does not exist
         }
 
-        bool stored = is_storable(dcc->get_id());
+        bool stored = is_storable(dcc->get_number());
         if(!stored) {
             return false; // Class has no database fields
         }
@@ -358,7 +355,7 @@ class SociSQLDatabase : public OldDatabaseBackend
         try {
             m_sql.begin(); // Start transaction
             for(auto it = equals.begin(); it != equals.end(); ++it) {
-                const Field* field = it->first;
+                DCField* field = it->first;
                 if(field->has_keyword("db")) {
                     m_sql << "SELECT " << field->get_name() << " FROM fields_" << dcc->get_name()
                           << " WHERE object_id=" << do_id << ";", into(value, ind);
@@ -401,15 +398,15 @@ class SociSQLDatabase : public OldDatabaseBackend
             return false;
         }
     }
-    virtual bool get_field(doid_t do_id, const Field* field, vector<uint8_t> &value)
+    virtual bool get_field(doid_t do_id, DCField* field, vector<uint8_t> &value)
     {
         // Get class from the objects table
-        const Class* dcc = get_class(do_id);
+        DCClass* dcc = get_class(do_id);
         if(!dcc) {
             return false; // Object does not exist
         }
 
-        bool stored = is_storable(dcc->get_id());
+        bool stored = is_storable(dcc->get_number());
         if(!stored) {
             return false; // Class has no database fields
         }
@@ -433,12 +430,12 @@ class SociSQLDatabase : public OldDatabaseBackend
                             FieldValues &values)
     {
         // Get class from the objects table
-        const Class* dcc = get_class(do_id);
+        DCClass* dcc = get_class(do_id);
         if(!dcc) {
             return false; // Object does not exist
         }
 
-        bool stored = is_storable(dcc->get_id());
+        bool stored = is_storable(dcc->get_number());
         if(!stored) {
             return false; // Class has no database fields
         }
@@ -515,7 +512,7 @@ class SociSQLDatabase : public OldDatabaseBackend
             if(m_sql.got_data()) {
                 check_class(dc_id, dc_name);
             } else {
-                const Class* dcc = g_dcf->get_class(i);
+                DCClass* dcc = g_dcf->get_class(i);
 
                 // Create fields table for the class
                 storable = create_fields_table(dcc);
@@ -584,7 +581,7 @@ class SociSQLDatabase : public OldDatabaseBackend
 
     void check_class(uint16_t id, string name)
     {
-        const Class* dcc = g_dcf->get_class_by_id(id);
+        DCClass* dcc = g_dcf->get_class(id);
         if(name != dcc->get_name()) {
             // TODO: Try and update the database instead of exiting
             m_log->fatal() << "Class name '" << dcc->get_name() << "' from File does not match"
@@ -598,7 +595,7 @@ class SociSQLDatabase : public OldDatabaseBackend
     }
 
     // returns true if class has db fields
-    bool create_fields_table(const Class* dcc)
+    bool create_fields_table(DCClass* dcc)
     {
         stringstream ss;
         if(sizeof(doid_t) <= sizeof(uint32_t)) {
@@ -611,7 +608,7 @@ class SociSQLDatabase : public OldDatabaseBackend
 
         int db_field_count = 0;
         for(unsigned int i = 0; i < dcc->get_num_fields(); ++i) {
-            const Field* field = dcc->get_field(i);
+            DCField* field = dcc->get_field(i);
             if(field->has_keyword("db") && !field->as_molecular()) {
                 db_field_count += 1;
                 // TODO: Store SimpleParameters and fields with 1 SimpleParameter
@@ -642,12 +639,12 @@ class SociSQLDatabase : public OldDatabaseBackend
         return storable;
     }
 
-    void get_all_from_table(doid_t id, const Class* dcc, FieldValues &fields)
+    void get_all_from_table(doid_t id, DCClass* dcc, FieldValues &fields)
     {
         string value;
         indicator ind;
         for(unsigned int i = 0; i < dcc->get_num_fields(); ++i) {
-            const Field* field = dcc->get_field(i);
+            DCField* field = dcc->get_field(i);
             if(field->has_keyword("db")) {
                 m_sql << "SELECT " << field->get_name() << " FROM fields_" << dcc->get_name()
                       << " WHERE object_id=" << id << ";", into(value, ind);
@@ -666,13 +663,13 @@ class SociSQLDatabase : public OldDatabaseBackend
         }
     }
 
-    void get_fields_from_table(doid_t id, const Class* dcc, const FieldList &fields,
+    void get_fields_from_table(doid_t id, DCClass* dcc, const FieldList &fields,
                                FieldValues &values)
     {
         string value;
         indicator ind;
         for(auto it = fields.begin(); it != fields.end(); ++it) {
-            const Field* field = *it;
+            DCField* field = *it;
             if(field->has_keyword("db")) {
                 m_sql << "SELECT " << field->get_name() << " FROM fields_" << dcc->get_name()
                       << " WHERE object_id=" << id << ";", into(value, ind);
@@ -691,7 +688,7 @@ class SociSQLDatabase : public OldDatabaseBackend
         }
     }
 
-    void set_fields_in_table(doid_t id, const Class* dcc,
+    void set_fields_in_table(doid_t id, DCClass* dcc,
                              const FieldValues &fields)
     {
         string name, value;
@@ -705,11 +702,11 @@ class SociSQLDatabase : public OldDatabaseBackend
         }
     }
 
-    void del_fields_in_table(doid_t id, const Class* dcc, const FieldList &fields)
+    void del_fields_in_table(doid_t id, DCClass* dcc, const FieldList &fields)
     {
         string name;
         for(auto it = fields.begin(); it != fields.end(); ++it) {
-            const Field* field = *it;
+            DCField* field = *it;
             if(field->has_keyword("db")) {
                 m_sql << "UPDATE fields_" << dcc->get_name() << " SET " << field->get_name()
                       << "=NULL WHERE object_id=" << id << ";";

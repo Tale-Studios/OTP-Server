@@ -201,7 +201,7 @@ void NetworkClient::start_receive()
                     std::unique_ptr<char[]> overread_bytes = std::make_unique<char[]>(bytes_left);
                     memcpy(overread_bytes.get(), event.data.get() + bytes_consumed, bytes_left);
                     self->process_datagram(overread_bytes, bytes_left);
-                } 
+                }
             }
         } else {
             self->process_datagram(event.data, event.length);
@@ -321,7 +321,7 @@ void NetworkClient::flush_send_queue(std::unique_lock<std::mutex> &lock)
     char *send_ptr = &m_send_buf[0];
     for(auto dg : m_send_queue) {
         // Add the size tag:
-        dgsize_t len = swap_le(dg->size());
+        dgsize_t len = dg->size();
         memcpy(send_ptr, (char*)&len, sizeof(dgsize_t));
         send_ptr += sizeof(dgsize_t);
 

@@ -3,7 +3,7 @@
 #include "config/ConfigGroup.h"
 
 /* Global Variables */
-const dclass::File *g_dcf = nullptr;
+DCFile *g_dcf = new DCFile;
 std::unique_ptr<Logger> g_logger(new Logger);
 std::unique_ptr<ConfigFile> g_config(new ConfigFile);
 EventSender g_eventsender;

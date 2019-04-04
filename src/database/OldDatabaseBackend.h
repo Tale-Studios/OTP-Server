@@ -1,13 +1,13 @@
 #pragma once
 #include "DatabaseBackend.h"
 #include "core/types.h"
-#include "dclass/dc/Class.h"
-#include "dclass/dc/Field.h"
+#include "dclass/dcClass.h"
+#include "dclass/dcField.h"
 #include <vector>
 #include <mutex>
 
 typedef std::vector<uint8_t> FieldValue;
-typedef std::vector<const dclass::Field*> FieldList;
+typedef std::vector<DCField*> FieldList;
 
 struct ObjectData {
     uint16_t dc_id;
@@ -39,24 +39,24 @@ class OldDatabaseBackend : public DatabaseBackend
     virtual bool get_object(doid_t do_id, ObjectData &dbo) = 0;
 
     //virtual bool get_exists(uint32_t do_id) = 0;
-    virtual const dclass::Class* get_class(doid_t do_id) = 0;
+    virtual DCClass* get_class(doid_t do_id) = 0;
 
-    virtual void del_field(doid_t do_id, const dclass::Field* field) = 0;
+    virtual void del_field(doid_t do_id, DCField* field) = 0;
     virtual void del_fields(doid_t do_id, const FieldList &fields) = 0;
 
-    virtual void set_field(doid_t do_id, const dclass::Field* field,
+    virtual void set_field(doid_t do_id, DCField* field,
                            const std::vector<uint8_t> &value) = 0;
     virtual void set_fields(doid_t do_id, const FieldValues &fields) = 0;
 
     // If not-equals/-empty, current are returned using value(s)
-    virtual bool set_field_if_empty(doid_t do_id, const dclass::Field* field,
+    virtual bool set_field_if_empty(doid_t do_id, DCField* field,
                                     std::vector<uint8_t> &value) = 0;
-    virtual bool set_field_if_equals(doid_t do_id, const dclass::Field* field,
+    virtual bool set_field_if_equals(doid_t do_id, DCField* field,
                                      const std::vector<uint8_t> &equal,
                                      std::vector<uint8_t> &value) = 0;
     virtual bool set_fields_if_equals(doid_t do_id, const FieldValues &equals,
                                       FieldValues &values) = 0;
-    virtual bool get_field(doid_t do_id, const dclass::Field* field,
+    virtual bool get_field(doid_t do_id, DCField* field,
                            std::vector<uint8_t> &value) = 0;
     virtual bool get_fields(doid_t do_id, const FieldList &fields,
                             FieldValues &values) = 0;

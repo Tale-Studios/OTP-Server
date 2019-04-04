@@ -4,7 +4,6 @@
 #include "clientagent/ClientMessages.h"
 #include "clientagent/ClientAgent.h"
 using namespace std;
-using dclass::Class;
 
 Client::Client(ConfigNode, ClientAgent* client_agent) :
     m_client_agent(client_agent)
@@ -128,7 +127,7 @@ void Client::generate_timeouts()
 
 // lookup_object returns the class of the object with a do_id.
 // If that object is not visible to the client, nullptr will be returned instead.
-const Class *Client::lookup_object(doid_t do_id)
+DCClass *Client::lookup_object(doid_t do_id)
 {
     // First see if it's an UberDOG:
     if(g_uberdogs.find(do_id) != g_uberdogs.end()) {
@@ -447,7 +446,7 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
 
         DeclaredObject obj;
         obj.id = do_id;
-        obj.dcc = g_dcf->get_class_by_id(dc_id);
+        obj.dcc = g_dcf->get_class(dc_id);
         m_declared_objects[do_id] = obj;
     }
     break;
@@ -603,7 +602,7 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
             obj.id = do_id;
             obj.parent = parent;
             obj.zone = zone;
-            obj.dcc = g_dcf->get_class_by_id(dc_id);
+            obj.dcc = g_dcf->get_class(dc_id);
             m_owned_objects[do_id] = obj;
         }
 
@@ -824,7 +823,7 @@ void Client::handle_object_entrance(DatagramIterator &dgi, bool other)
     if(m_visible_objects.find(do_id) == m_visible_objects.end()) {
         VisibleObject obj;
         obj.id = do_id;
-        obj.dcc = g_dcf->get_class_by_id(dc_id);
+        obj.dcc = g_dcf->get_class(dc_id);
         obj.parent = parent;
         obj.zone = zone;
         m_visible_objects[do_id] = obj;
