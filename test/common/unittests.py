@@ -1,10 +1,10 @@
 import unittest, subprocess, tempfile, os, threading
 from socket import socket, AF_INET, SOCK_STREAM, SOL_TCP, TCP_NODELAY
-from astron import *
+from otp import *
 
 class ConfigTest(unittest.TestCase):
     class ConfigRunner(object):
-        DAEMON_PATH = './astrond'
+        DAEMON_PATH = './otp_server'
 
         def __init__(self, config):
             self.config = config
@@ -38,7 +38,7 @@ class ConfigTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        file_handle, cls.config_path = tempfile.mkstemp(prefix = 'astron-', suffix = '.cfg.yaml')
+        file_handle, cls.config_path = tempfile.mkstemp(prefix = 'otp-', suffix = '.cfg.yaml')
         os.close(file_handle)
 
         cls.test_runner = ConfigTest.ConfigRunner(cls.config_path)

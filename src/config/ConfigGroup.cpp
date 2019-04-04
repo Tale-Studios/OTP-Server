@@ -45,7 +45,7 @@ void ConfigGroup::add_variable(const string& varname, rtest r)
     bool inserted = m_variables.insert(pair<string, rtest>(varname, r)).second;
     if(!inserted) {
         config_log.fatal() << "Duplicate ConfigVariable name (" << varname << ") in ConfigGroup '"
-                           << m_name << ".'\n\tPlease submit a bug/issue to Astron with your"
+                           << m_name << ".'\n\tPlease submit a bug/issue to OTP with your"
                            << " CMakeCache and this ouput.\n";
         exit(1);
     }

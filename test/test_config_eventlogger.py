@@ -12,7 +12,7 @@ class TestConfigEventLogger(ConfigTest):
             roles:
                 - type: eventlogger
                   bind: 0.0.0.0:9090
-                  output: /var/log/astron/eventlogger/el-%Y-%m-%d-%H-%M-%S.log
+                  output: /var/log/otp/eventlogger/el-%Y-%m-%d-%H-%M-%S.log
                   rotate_interval: 1d
             """
         self.assertEquals(self.checkConfig(config), 'Valid')
@@ -25,7 +25,7 @@ class TestConfigEventLogger(ConfigTest):
             roles:
                 - type: eventlogger
                   bind: pizza:2314
-                  output: /var/log/astron/eventlogger/el-%Y-%m-%d-%H-%M-%S.log
+                  output: /var/log/otp/eventlogger/el-%Y-%m-%d-%H-%M-%S.log
                   rotate_interval: 1d
             """
         self.assertEquals(self.checkConfig(config, 10), 'Invalid')
@@ -38,7 +38,7 @@ class TestConfigEventLogger(ConfigTest):
             roles:
                 - type: eventlogger
                   bind: ::1:2314
-                  output: /var/log/astron/eventlogger/el-%Y-%m-%d-%H-%M-%S.log
+                  output: /var/log/otp/eventlogger/el-%Y-%m-%d-%H-%M-%S.log
                   rotate_interval: 1d
             """
         #self.assertEquals(self.checkConfig(config), 'Valid')

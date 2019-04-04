@@ -15,7 +15,7 @@ typedef uint32_t sizetag_t;
 typedef uint16_t sizetag_t;
 #endif
 
-#ifdef ASTRON_32BIT_DATAGRAMS
+#ifdef OTP_32BIT_DATAGRAMS
 typedef uint32_t dgsize_t;
 #else
 typedef uint16_t dgsize_t;
@@ -36,8 +36,8 @@ class DatagramOverflow : public std::runtime_error
     DatagramOverflow(const std::string &what) : std::runtime_error(what) { }
 };
 
-// A Datagram is a buffer of binary data ready for networking (ie. formatted according to Astron's
-// over-the-wire formatting specification).  It is most often used to represent Astron client and
+// A Datagram is a buffer of binary data ready for networking (ie. formatted according to OTP's
+// over-the-wire formatting specification).  It is most often used to represent OTP client and
 // server messages, as well as occasionally DistributedObject field data.
 class Datagram
 {

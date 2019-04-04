@@ -19,7 +19,7 @@
 class MDParticipantInterface;
 class MDUpstream;
 
-// A MessageDirector is the internal networking object for an Astron server-node.
+// A MessageDirector is the internal networking object for an OTP server-node.
 // The MessageDirector receives message from other servers and routes them to the
 //     Client Agent, State Server, DB Server, DB-SS, and other server-nodes as necessary.
 class MessageDirector final : public ChannelMap
@@ -32,7 +32,7 @@ class MessageDirector final : public ChannelMap
     void init_network();
     static MessageDirector singleton;
 
-    // route_datagram accepts any Astron message (a Datagram), and
+    // route_datagram accepts any OTP message (a Datagram), and
     //     properly routes it to any subscribed listeners.
     // Message on the CONTROL_MESSAGE channel are processed internally by the MessageDirector.
     void route_datagram(MDParticipantInterface *p, DatagramHandle dg);

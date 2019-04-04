@@ -64,7 +64,7 @@ int main(int argc, char *argv[])
 #endif
 
     int config_arg_index = -1;
-    cfg_file = "astrond.yml";
+    cfg_file = "otpd.yml";
     LogSeverity sev = g_logger->get_min_severity();
     for(int i = 1; i < argc; i++) {
         if((strcmp(argv[i], "--log") == 0 || strcmp(argv[i], "-L") == 0) && i + 1 < argc) {
@@ -102,8 +102,7 @@ int main(int argc, char *argv[])
             printHelp(cout);
             return 0;
         } else if(strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-v") == 0) {
-            cout << "A Server Technology for Realtime Object Networking (Astron)\n"
-                 "http://github.com/astron/astron\n"
+            cout << "The OTP Server\n"
 
 #ifdef GIT_SHA1
                  "Revision: " << GIT_SHA1 << "\n"
@@ -200,7 +199,7 @@ int main(int argc, char *argv[])
     }
 
     // Now hook up our speciailize signal handler
-    astron_handle_signals();
+    otp_handle_signals();
 
     try {
         TaskQueue::singleton.init_queue();
@@ -238,7 +237,7 @@ int main(int argc, char *argv[])
             RoleFactory::singleton().instantiate_role((*it)["type"].as<std::string>(), *it);
         }
     }
-    // This exception is propogated if astron_shutdown is called
+    // This exception is propogated if otp_shutdown is called
     catch(const ShutdownException& e) {
         return e.exit_code();
     }
@@ -249,7 +248,7 @@ int main(int argc, char *argv[])
         g_loop->run();
     }
 
-    // This exception is propogated if astron_shutdown is called
+    // This exception is propogated if otp_shutdown is called
     catch(const ShutdownException& e) {
         exit_code = e.exit_code();
     }
@@ -267,11 +266,11 @@ int main(int argc, char *argv[])
 // printHelp outputs the cli help-text to the given stream.
 void printHelp(ostream &s)
 {
-    s << "Usage:    astrond [options]... [CONFIG_FILE]\n"
+    s << "Usage:    otp_server [options]... [CONFIG_FILE]\n"
       "\n"
-      "Astrond is a distributed server daemon.\n"
-      "By default Astron looks for a configuration file in the current\n"
-      "working directory as \"astrond.yml\".  A different config file path\n"
+      "otp_server is a distributed server daemon.\n"
+      "By default the OTP server looks for a configuration file in the current\n"
+      "working directory as \"otpd.yml\".  A different config file path\n"
       "can be specified as a positional argument.\n"
       "\n"
       "-h, --help      Print this help dialog.\n"
@@ -281,7 +280,7 @@ void printHelp(ostream &s)
       "-b, --boring    Disables colored pretty printing. \n"
       "-l, --loglevel  Specify the minimum log level that should be logged;\n"
       "                  Security, Error, and Fatal will always be logged;\n"
-#ifdef ASTRON_DEBUG_MESSAGES
+#ifdef OTP_DEBUG_MESSAGES
       "                (available): packet, trace, debug, info, warning, security\n"
 #else
       "                (available): info, warning, security\n"
@@ -290,7 +289,7 @@ void printHelp(ostream &s)
 #endif
       "\n"
       "Example:\n"
-      "    astrond /tmp/my_config_file.yaml\n"
+      "    otp_server /tmp/my_config_file.yaml\n"
       "\n";
     s.flush();
 }
@@ -300,14 +299,14 @@ void printCompiledOptions(ostream &s)
     s << "Compilation options: "
 
       //If on, datagrams and dclass fields will use 32-bit length tags instead of 16-bit.
-#ifdef ASTRON_32BIT_DATAGRAMS
+#ifdef OTP_32BIT_DATAGRAMS
       "32-bit length tag Datagrams, "
 #else
       "16-bit length tag Datagrams, "
 #endif
 
       //If on, channels will be 128-bit and doids and zones will be 64-bit (instead of 64/32).
-#ifdef ASTRON_128BIT_CHANNELS
+#ifdef OTP_128BIT_CHANNELS
       "128-bit channel space, 64-bit distributed object id's, 64-bit zones"
 #else
       "64-bit channel space, 32-bit distributed object id's, 32-bit zones"

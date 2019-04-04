@@ -3,7 +3,7 @@
 #include <cstdint>
 
 /* Type definitions */
-#ifdef ASTRON_128BIT_CHANNELS
+#ifdef OTP_128BIT_CHANNELS
 #include "util/uint128.h"
 typedef uint128_t channel_t;
 typedef uint64_t doid_t;

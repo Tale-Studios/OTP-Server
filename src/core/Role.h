@@ -12,7 +12,7 @@ class RoleConfigGroup : public ConfigGroup
     ConfigVariable<std::string> m_type;
 };
 
-// A Role is a major component of Astron which is configured in the daemon's config file.
+// A Role is a major component of the OTP server which is configured in the daemon's config file.
 // Can send or receive datagram messages with the MessageDirector.
 class Role : public MDParticipantInterface
 {

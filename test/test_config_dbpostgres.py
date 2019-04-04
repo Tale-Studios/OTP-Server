@@ -35,8 +35,8 @@ class TestConfigDBPostgres(ConfigTest):
                     type: soci
                     driver: postgresql
                     server: 127.0.0.1:57023
-                    username: astron
-                    database: astron
+                    username: otp
+                    database: otp
             """ % test_dc
         self.assertEquals(self.checkConfig(config), 'Valid')
 
@@ -58,8 +58,8 @@ class TestConfigDBPostgres(ConfigTest):
                     driver: postgresql
                     host: 127.0.0.1
                     port: 57023
-                    username: astron
-                    database: astron
+                    username: otp
+                    database: otp
             """ % test_dc
         self.assertEquals(self.checkConfig(config), 'Invalid')
 
@@ -80,8 +80,8 @@ class TestConfigDBPostgres(ConfigTest):
                     type: soci
                     driver: postgresql
                     server: 127.0.0.1:57023
-                    username: astron
-                    database: astron
+                    username: otp
+                    database: otp
             """ % test_dc
         self.assertEquals(self.checkConfig(config), 'Invalid')
 
@@ -101,8 +101,8 @@ class TestConfigDBPostgres(ConfigTest):
                     type: soci
                     driver: postgresql
                     server: 127.0.0.1:57023
-                    username: astron
-                    database: astron
+                    username: otp
+                    database: otp
             """ % test_dc
         self.assertEquals(self.checkConfig(config), 'Invalid')
 
@@ -123,8 +123,8 @@ class TestConfigDBPostgres(ConfigTest):
                     type: soci
                     driver: postgresql
                     server: 127.0.0.1:57023
-                    username: astron
-                    database: astron
+                    username: otp
+                    database: otp
             """ % test_dc
         self.assertEquals(self.checkConfig(config), 'Invalid')
 
@@ -144,8 +144,8 @@ class TestConfigDBPostgres(ConfigTest):
                     type: soci
                     driver: postgresql
                     server: 127.0.0.1:57023
-                    username: astron
-                    database: astron
+                    username: otp
+                    database: otp
             """ % test_dc
         self.assertEquals(self.checkConfig(config), 'Invalid')
 
@@ -169,8 +169,8 @@ class TestConfigDBPostgres(ConfigTest):
                     type: soci
                     driver: postgresql
                     server: 127.0.0.1:57023
-                    username: astron
-                    database: astron
+                    username: otp
+                    database: otp
             """ % test_dc
         self.assertEquals(self.checkConfig(config), 'Valid')
 
@@ -193,8 +193,8 @@ class TestConfigDBPostgres(ConfigTest):
                     type: soci
                     driver: postgresql
                     server: 127.0.0.1:57023
-                    username: astron
-                    database: astron
+                    username: otp
+                    database: otp
             """ % test_dc
         self.assertEquals(self.checkConfig(config), 'Valid')
 
@@ -217,8 +217,8 @@ class TestConfigDBPostgres(ConfigTest):
                     type: soci
                     driver: postgresql
                     server: 127.0.0.1:57023
-                    username: astron
-                    database: astron
+                    username: otp
+                    database: otp
             """ % test_dc
         self.assertEquals(self.checkConfig(config), 'Invalid')
 

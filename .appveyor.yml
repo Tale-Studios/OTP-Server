@@ -4,7 +4,7 @@ install:
 - del C:\OpenSSL-Win64\lib\libeay32.lib
 - set BOOST_ROOT=C:\Libraries\boost_1_62_0
 - set BOOST_LIBRARYDIR=%BOOST_ROOT%\lib64-msvc-14.0
-# Various dependencies needed by Astron...
+# Various dependencies needed by the OTP server...
 - cd dependencies
 # build yaml-cpp
 - appveyor DownloadFile https://github.com/jbeder/yaml-cpp/archive/yaml-cpp-0.6.2.zip -FileName yaml-cpp.zip
@@ -40,19 +40,19 @@ install:
 
 build_script:
 - cd build
-- cmake -G"Visual Studio 14 2015 Win64" -DCMAKE_INSTALL_PREFIX=C:\libraries\mongo-cxx-driver -DCMAKE_PREFIX_PATH=C:\libraries\mongoc;C:\projects\astron\dependencies\libuv;C:\projects\astron\dependencies\libuv\Release -DCMAKE_BUILD_TYPE=Release ..
+- cmake -G"Visual Studio 14 2015 Win64" -DCMAKE_INSTALL_PREFIX=C:\libraries\mongo-cxx-driver -DCMAKE_PREFIX_PATH=C:\libraries\mongoc;C:\projects\otp\dependencies\libuv;C:\projects\otp\dependencies\libuv\Release -DCMAKE_BUILD_TYPE=Release ..
 - msbuild /p:Configuration=Release ALL_BUILD.vcxproj
 - cd Release
-- copy /Y C:\projects\astron\dependencies\libuv\Release\*.dll .
+- copy /Y C:\projects\otp\dependencies\libuv\Release\*.dll .
 - copy /Y C:\libraries\mongoc\bin\*.dll .
 - copy /Y C:\libraries\mongo-cxx-driver\bin\*.dll .
-- 7z a astron.zip *
+- 7z a otp.zip *
 - cd ..
 
 test_script:
-- 7z x Release\astron.zip
+- 7z x Release\otp.zip
 - set PATH=%PATH%;C:\mongodb\bin
 - ctest --output-on-failure
 
 artifacts:
-- path: build\Release\astron.zip
+- path: build\Release\otp.zip

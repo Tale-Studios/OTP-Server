@@ -2,7 +2,7 @@
 import unittest, tempfile, shutil
 from common.unittests import ProtocolTest
 from common.dbserver import DBServerTestsuite
-from common.astron import *
+from common.otp import *
 from common.dcfile import *
 from database.yamldb import setup_yamldb, teardown_yamldb
 
@@ -34,7 +34,7 @@ class TestDatabaseServerYAML(ProtocolTest, DBServerTestsuite):
         cls.daemon = Daemon(CONFIG % (USE_THREADING, test_dc, cls.yamldb_path))
         cls.daemon.start()
         cls.conn = cls.connectToServer()
-        cls.conn.s.settimeout(1.0) # Allow time for Astron<->filesystem operations.
+        cls.conn.s.settimeout(1.0) # Allow time for OTP<->filesystem operations.
         cls.objects = cls.connectToServer()
         cls.objects.send(Datagram.create_add_range(DATABASE_PREFIX|1000000,
                                                    DATABASE_PREFIX|1000010))

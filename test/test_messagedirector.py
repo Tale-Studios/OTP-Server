@@ -3,7 +3,7 @@ import unittest
 from socket import *
 
 from common.unittests import ProtocolTest
-from common.astron import *
+from common.otp import *
 
 CONFIG = """\
 messagedirector:

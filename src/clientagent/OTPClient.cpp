@@ -13,20 +13,20 @@
 using namespace std;
 
 
-static ConfigGroup astronclient_config("libastron", ca_client_config);
-static ConfigVariable<bool> relocate_owned("relocate", false, astronclient_config);
-static ConfigVariable<string> interest_permissions("add_interest", "visible", astronclient_config);
+static ConfigGroup otpclient_config("libotp", ca_client_config);
+static ConfigVariable<bool> relocate_owned("relocate", false, otpclient_config);
+static ConfigVariable<string> interest_permissions("add_interest", "visible", otpclient_config);
 static BooleanValueConstraint relocate_is_boolean(relocate_owned);
 
-static ConfigVariable<bool> send_hash_to_client("send_hash", true, astronclient_config);
-static ConfigVariable<bool> send_version_to_client("send_version", true, astronclient_config);
+static ConfigVariable<bool> send_hash_to_client("send_hash", true, otpclient_config);
+static ConfigVariable<bool> send_version_to_client("send_version", true, otpclient_config);
 
 static ConfigVariable<uint64_t> write_buffer_size("write_buffer_size", 256 * 1024,
-        astronclient_config);
-static ConfigVariable<unsigned int> write_timeout_ms("write_timeout_ms", 5000, astronclient_config);
+        otpclient_config);
+static ConfigVariable<unsigned int> write_timeout_ms("write_timeout_ms", 5000, otpclient_config);
 
 //by default, have heartbeat disabled.
-static ConfigVariable<long> heartbeat_timeout_config("heartbeat_timeout", 0, astronclient_config);
+static ConfigVariable<long> heartbeat_timeout_config("heartbeat_timeout", 0, otpclient_config);
 
 static bool is_permission_level(const string& str)
 {
@@ -41,7 +41,7 @@ enum InterestPermission {
     INTERESTS_DISABLED
 };
 
-class AstronClient : public Client, public NetworkHandler
+class OTPClient : public Client, public NetworkHandler
 {
   private:
     std::shared_ptr<NetworkClient> m_client;
@@ -57,7 +57,7 @@ class AstronClient : public Client, public NetworkHandler
     Timeout* m_heartbeat_timer = nullptr;
 
   public:
-    AstronClient(ConfigNode config, ClientAgent* client_agent, const std::shared_ptr<uvw::TcpHandle> &socket,
+    OTPClient(ConfigNode config, ClientAgent* client_agent, const std::shared_ptr<uvw::TcpHandle> &socket,
                  const uvw::Addr &remote, const uvw::Addr &local, const bool haproxy_mode) :
         Client(config, client_agent), m_client(std::make_shared<NetworkClient>(this)),
         m_config(config),
@@ -103,7 +103,7 @@ class AstronClient : public Client, public NetworkHandler
         //If heartbeat, start the heartbeat timer now.
         if(m_heartbeat_timeout != 0) {
             m_heartbeat_timer = new Timeout(m_heartbeat_timeout,
-                                std::bind(&AstronClient::heartbeat_timeout,
+                                std::bind(&OTPClient::heartbeat_timeout,
                                           this));
             m_heartbeat_timer->start();
         }
@@ -200,7 +200,7 @@ class AstronClient : public Client, public NetworkHandler
 
     // receive_disconnect is called when the Client closes the tcp
     //     connection or otherwise when the tcp connection is lost.
-    // Note: In the Astron client protocol, the server is normally
+    // Note: In the OTP client protocol, the server is normally
     //       responsible for terminating the connection.
     virtual void receive_disconnect(const uvw::ErrorEvent &evt)
     {
@@ -708,4 +708,4 @@ class AstronClient : public Client, public NetworkHandler
 
 };
 
-static ClientType<AstronClient> astron_client_fact("libastron");
+static ClientType<OTPClient> otp_client_fact("libotp");

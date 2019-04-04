@@ -825,7 +825,7 @@ void DistributedObject::handle_datagram(DatagramHandle, DatagramIterator &dgi)
         break;
     }
 
-    // zones in Astron don't have meaning to the cluster itself
+    // zones in OTP don't have meaning to the cluster itself
     // as such, there is no table of zones to query in the network
     // instead, a zone is said to be active if it has at least one object in it
     // to get the active zones, get the keys from m_zone_objects and dump them into a std::set<zone_t>

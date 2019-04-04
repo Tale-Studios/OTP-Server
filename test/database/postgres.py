@@ -24,7 +24,7 @@ def setup_postgres(unittest):
         unittest.fail(POSTGRESQL_SETUP_ERROR)
 
     # Create temp folder to house database
-    postgres_path = tempfile.mkdtemp(prefix = 'astron-', suffix = '.postgresql')
+    postgres_path = tempfile.mkdtemp(prefix = 'otp-', suffix = '.postgresql')
 
     # Setup a postgresql instance owned by the local user
     os.system('initdb -D %s' % postgres_path)
@@ -43,8 +43,8 @@ def setup_postgres(unittest):
     time.sleep(0.5)
 
     # Create a user and database in the instance
-    os.system('createuser -p 57023 -h 127.0.0.1 --superuser --createdb astron')
-    os.system('createdb -p 57023 -h 127.0.0.1 --username=astron astron')
+    os.system('createuser -p 57023 -h 127.0.0.1 --superuser --createdb otp')
+    os.system('createdb -p 57023 -h 127.0.0.1 --username=otp otp')
 
     # Set variables
     unittest.postgres_path = postgres_path

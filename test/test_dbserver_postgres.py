@@ -2,7 +2,7 @@
 import unittest
 from common.unittests import ProtocolTest
 from common.dbserver import DBServerTestsuite
-from common.astron import *
+from common.otp import *
 from common.dcfile import *
 from database.postgres import setup_postgres, teardown_postgres
 
@@ -26,8 +26,8 @@ roles:
         type: soci
         driver: postgresql
         server: 127.0.0.1:57023
-        username: astron
-        database: astron
+        username: otp
+        database: otp
 """ % (USE_THREADING, test_dc)
 
 class TestDatabaseServerPostgres(ProtocolTest, DBServerTestsuite):

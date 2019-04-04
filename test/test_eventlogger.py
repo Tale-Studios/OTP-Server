@@ -1,6 +1,6 @@
 #!/usr/bin/env python2
 import unittest, time, socket, os, json, tempfile
-from common.astron import *
+from common.otp import *
 from common.dcfile import *
 
 NETWORK_WAIT = 0.1 # seconds
@@ -23,7 +23,7 @@ NONSTANDARD_MSGPACK = '{'
 class TestEventLogger(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        logHandle, cls.log_file = tempfile.mkstemp(prefix = 'astron-', suffix = '.log')
+        logHandle, cls.log_file = tempfile.mkstemp(prefix = 'otp-', suffix = '.log')
         os.close(logHandle)
 
         cls.daemon = Daemon(CONFIG % cls.log_file)

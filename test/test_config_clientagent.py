@@ -37,7 +37,7 @@ class TestConfigClientAgent(ConfigTest):
                   bind: 127.0.0.1:57135
                   version: "Sword Art Online v5.1"
                   client:
-                      type: libastron
+                      type: libotp
                       add_interest: disabled
                       write_buffer_size: 262144
                       write_timeout_ms: 20
@@ -49,7 +49,7 @@ class TestConfigClientAgent(ConfigTest):
                   bind: 127.0.0.1:57144
                   version: "Sword Art Online v5.1"
                   client:
-                      type: libastron
+                      type: libotp
                       add_interest: visible
                       write_buffer_size: 0
                       write_timeout_ms: 0
@@ -143,7 +143,7 @@ class TestConfigClientAgent(ConfigTest):
                   bind: 127.0.0.1:57128
                   version: "Sword Art Online v5.1"
                   client:
-                      type: astron
+                      type: otp
                   channels:
                       min: 3100
                       max: 3999

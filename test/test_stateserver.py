@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 import unittest, time
 from common.unittests import ProtocolTest
-from common.astron import *
+from common.otp import *
 from common.dcfile import *
 
 CONFIG = """\

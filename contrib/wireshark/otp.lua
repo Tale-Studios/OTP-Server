@@ -1,25 +1,25 @@
 require ("bit")
 
-p_astron = Proto ("astron", "Astron (MD)")
+p_otp = Proto ("otp", "OTP (MD)")
 
-local f_length = ProtoField.uint16("astron.length", "Message length", base.DEC)
-local f_recipient = ProtoField.uint64("astron.recipient", "Recipient channel", base.HEX)
-local f_sender = ProtoField.uint64("astron.sender", "Sender channel", base.HEX)
-local f_msgtype = ProtoField.uint16("astron.msgtype", "Message type", base.DEC)
+local f_length = ProtoField.uint16("otp.length", "Message length", base.DEC)
+local f_recipient = ProtoField.uint64("otp.recipient", "Recipient channel", base.HEX)
+local f_sender = ProtoField.uint64("otp.sender", "Sender channel", base.HEX)
+local f_msgtype = ProtoField.uint16("otp.msgtype", "Message type", base.DEC)
 
-local f_doid = ProtoField.uint32("astron.doid", "DistributedObject ID", base.DEC)
-local f_field = ProtoField.uint16("astron.field", "Field ID", base.DEC)
-local f_field_count = ProtoField.uint16("astron.field_count", "Field count", base.DEC)
+local f_doid = ProtoField.uint32("otp.doid", "DistributedObject ID", base.DEC)
+local f_field = ProtoField.uint16("otp.field", "Field ID", base.DEC)
+local f_field_count = ProtoField.uint16("otp.field_count", "Field count", base.DEC)
 
-local f_object_count = ProtoField.uint32("astron.object_count", "Object count", base.DEC)
+local f_object_count = ProtoField.uint32("otp.object_count", "Object count", base.DEC)
 
-local f_parent = ProtoField.uint32("astron.parent", "Parent ID", base.DEC)
-local f_zone = ProtoField.uint32("astron.zone", "Zone ID", base.DEC)
-local f_zone_count = ProtoField.uint16("astron.zone_count", "Zone count", base.DEC)
+local f_parent = ProtoField.uint32("otp.parent", "Parent ID", base.DEC)
+local f_zone = ProtoField.uint32("otp.zone", "Zone ID", base.DEC)
+local f_zone_count = ProtoField.uint16("otp.zone_count", "Zone count", base.DEC)
 
-local f_context = ProtoField.uint32("astron.context", "Request context", base.DEC)
+local f_context = ProtoField.uint32("otp.context", "Request context", base.DEC)
 
-p_astron.fields = {
+p_otp.fields = {
 	f_length, f_recipient, f_sender, f_msgtype,
 
 	f_doid, f_field, f_field_count,
@@ -291,10 +291,10 @@ function dissect_one (buf, root, packet_descriptions)
 	return length + 2
 end
 
-function p_astron.dissector (buf, pinfo, root)
+function p_otp.dissector (buf, pinfo, root)
 	if buf:len() < 2 then return end
 
-	local root = root:add(p_astron, buf)
+	local root = root:add(p_otp, buf)
 
 	local descriptions = {}
 	local message_count = 0
@@ -315,15 +315,15 @@ function p_astron.dissector (buf, pinfo, root)
 	end
 
 	if message_count > 0 then
-		pinfo.cols.protocol = p_astron.name
+		pinfo.cols.protocol = p_otp.name
 		pinfo.cols.info = table.concat(descriptions, "; ")
 	end
 
 	return offset
 end
 
-function p_astron.init()
+function p_otp.init()
 	local tcp_dissector_table = DissectorTable.get("tcp.port")
 
-	tcp_dissector_table:add(7199, p_astron)
+	tcp_dissector_table:add(7199, p_otp)
 end

@@ -23,7 +23,7 @@ enum LogSeverity {
     LSEVERITY_INFO,
     // Warning log messages occur when the daemon detects a circumstance which should probably not
     // occur but is also not strictly erroneous.  Typically these messages are indicative of a
-    // larger problem which may need to be fixed either in the Application logic or in Astron.
+    // larger problem which may need to be fixed either in the Application logic or in the OTP server.
     // Within a production environment, proper application-logic should not output any warnings.
     LSEVERITY_WARNING,
     // Security log messages occur when the ClientAgent (or --much less often-- another role),
@@ -176,38 +176,38 @@ class LogCategory
     }
 
 #define F(level, severity) \
-	LockedLogOutput level() \
-	{ \
-		LockedLogOutput out = g_logger->log(severity); \
-		out << m_name << ": "; \
-		return out; \
-	}
+    LockedLogOutput level() \
+    { \
+        LockedLogOutput out = g_logger->log(severity); \
+        out << m_name << ": "; \
+        return out; \
+    }
 
-#ifdef ASTRON_DEBUG_MESSAGES
+#ifdef OTP_DEBUG_MESSAGES
     // packet() provides a stream with the time and "PACKET" severity preprended to the message.
-    // packet messages are only output when compiled with -DASTRON_DEBUG_MESSAGES.
+    // packet messages are only output when compiled with -DOTP_DEBUG_MESSAGES.
     F(packet, LSEVERITY_PACKET)
     // trace() provides a stream with the time and "TRACE" severity preprended to the message.
-    // trace messages are only output when compiled with -DASTRON_DEBUG_MESSAGES.
+    // trace messages are only output when compiled with -DOTP_DEBUG_MESSAGES.
     F(trace, LSEVERITY_TRACE)
     // debug() provides a stream with the time and "DEBUG" severity preprended to the message.
-    // trace messages are only output when compiled with -DASTRON_DEBUG_MESSAGES.
+    // trace messages are only output when compiled with -DOTP_DEBUG_MESSAGES.
     F(debug, LSEVERITY_DEBUG)
 #else
     // packet() provides a stream with the time and "PACKET" severity preprended to the message.
-    // packet messages are only output when compiled with -DASTRON_DEBUG_MESSAGES.
+    // packet messages are only output when compiled with -DOTP_DEBUG_MESSAGES.
     inline NullStream &packet()
     {
         return null_stream;
     }
     // trace() provides a stream with the time and "TRACE" severity preprended to the message.
-    // trace messages are only output when compiled with -DASTRON_DEBUG_MESSAGES.
+    // trace messages are only output when compiled with -DOTP_DEBUG_MESSAGES.
     inline NullStream &trace()
     {
         return null_stream;
     }
     // debug() provides a stream with the time and "DEBUG" severity preprended to the message.
-    // debug messages are only output when compiled with -DASTRON_DEBUG_MESSAGES.
+    // debug messages are only output when compiled with -DOTP_DEBUG_MESSAGES.
     inline NullStream &debug()
     {
         return null_stream;

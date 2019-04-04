@@ -4,7 +4,7 @@ __all__ = ['Daemon', 'Datagram', 'DatagramIterator',
            'MDConnection', 'ChannelConnection', 'ClientConnection']
 
 class Daemon(object):
-    DAEMON_PATH = './astrond'
+    DAEMON_PATH = './otp_server'
 
     def __init__(self, config):
         self.config = config
@@ -14,7 +14,7 @@ class Daemon(object):
 
     def start(self):
         if 'MANUAL_LAUNCH_CONFIG' in os.environ:
-            # User wants to manually launch their Astron daemon, so we'll write
+            # User wants to manually launch their OTP daemon, so we'll write
             # out the config for them and prompt them to
             with open(os.environ['MANUAL_LAUNCH_CONFIG'], 'wb') as config:
                 config.write(self.config)
@@ -23,7 +23,7 @@ class Daemon(object):
 
             return # Because the start happened manually.
 
-        configHandle, self.config_file = tempfile.mkstemp(prefix = 'astron', suffix = 'cfg.yaml')
+        configHandle, self.config_file = tempfile.mkstemp(prefix = 'otp', suffix = 'cfg.yaml')
         os.write(configHandle, self.config)
         os.close(configHandle)
 

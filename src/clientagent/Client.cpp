@@ -345,7 +345,7 @@ void Client::send_disconnect(uint16_t reason, const string &error_string, bool s
     log_event(event);
 }
 
-// handle_datagram is the handler for datagrams received from the Astron cluster
+// handle_datagram is the handler for datagrams received from the OTP cluster
 void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
 {
     lock_guard<recursive_mutex> lock(m_client_lock);

@@ -482,10 +482,10 @@ class MongoDatabase : public DatabaseBackend
 
         // Init the globals collection/document:
         auto client = new_connection();
-        auto globals = client[m_uri.database()]["astron.globals"].find_one(
+        auto globals = client[m_uri.database()]["otp.globals"].find_one(
                            document {} << "_id" << "GLOBALS" << finalize);
         if(!globals) {
-            client[m_uri.database()]["astron.globals"].insert_one(
+            client[m_uri.database()]["otp.globals"].insert_one(
                 document {} << "_id" << "GLOBALS"
                 << "doid" << open_document
                 << "monotonic" << static_cast<int64_t>(min_id)
@@ -621,7 +621,7 @@ class MongoDatabase : public DatabaseBackend
                        << "(" << doid << "): " << bsoncxx::to_json(fields) << endl;
 
         try {
-            db["astron.objects"].insert_one(document {}
+            db["otp.objects"].insert_one(document {}
                                             << "_id" << static_cast<int64_t>(doid)
                                             << "dclass" << operation->dclass()->get_name()
                                             << "fields" << fields
@@ -641,7 +641,7 @@ class MongoDatabase : public DatabaseBackend
     {
         bool success;
         try {
-            auto result = db["astron.objects"].delete_one(document {}
+            auto result = db["otp.objects"].delete_one(document {}
                           << "_id" << static_cast<int64_t>(operation->doid()) <<
                           finalize);
             success = result && (result->deleted_count() == 1);
@@ -666,7 +666,7 @@ class MongoDatabase : public DatabaseBackend
     {
         bsoncxx::stdx::optional<bsoncxx::document::value> obj;
         try {
-            obj = db["astron.objects"].find_one(document {}
+            obj = db["otp.objects"].find_one(document {}
                                                 << "_id" << static_cast<int64_t>(operation->doid())
                                                 << finalize);
         } catch(mongocxx::operation_exception &e) {
@@ -740,7 +740,7 @@ class MongoDatabase : public DatabaseBackend
 
         bsoncxx::stdx::optional<bsoncxx::document::value> obj;
         try {
-            obj = db["astron.objects"].find_one_and_update(query_obj.view(), updates.view());
+            obj = db["otp.objects"].find_one_and_update(query_obj.view(), updates.view());
         } catch(mongocxx::operation_exception &e) {
             m_log->error() << "Unexpected error while modifying "
                            << operation->doid() << ": " << e.what() << endl;
@@ -760,7 +760,7 @@ class MongoDatabase : public DatabaseBackend
             // criteria mismatch or a missing DOID.
             if(!operation->criteria_fields().empty()) {
                 try {
-                    obj = db["astron.objects"].find_one(document {}
+                    obj = db["otp.objects"].find_one(document {}
                                                         << "_id" << static_cast<int64_t>(operation->doid()) << finalize);
                 } catch(mongocxx::operation_exception &e) {
                     m_log->error() << "Unexpected error while modifying "
@@ -824,7 +824,7 @@ class MongoDatabase : public DatabaseBackend
         // outlandish requests like this) this shouldn't be a huge issue.
         m_log->trace() << "Reverting changes made to " << operation->doid() << endl;
         try {
-            db["astron.objects"].replace_one(
+            db["otp.objects"].replace_one(
                 document {} << "_id" << static_cast<int64_t>(operation->doid()) << finalize,
                 obj_v);
         } catch(mongocxx::operation_exception &e) {
@@ -902,7 +902,7 @@ class MongoDatabase : public DatabaseBackend
 
     doid_t assign_doid_monotonic(mongocxx::database &db)
     {
-        auto obj = db["astron.globals"].find_one_and_update(
+        auto obj = db["otp.globals"].find_one_and_update(
                        document {} << "_id" << "GLOBALS"
                        << "doid.monotonic" << open_document << "$gte" << static_cast<int64_t>(m_min_id) << close_document
                        << "doid.monotonic" << open_document << "$lte" << static_cast<int64_t>(m_max_id) << close_document
@@ -927,7 +927,7 @@ class MongoDatabase : public DatabaseBackend
     // This is used when the monotonic counter is exhausted:
     doid_t assign_doid_reuse(mongocxx::database &db)
     {
-        auto obj = db["astron.globals"].find_one_and_update(
+        auto obj = db["otp.globals"].find_one_and_update(
                        document {} << "_id" << "GLOBALS"
                        << "doid.free.0" << open_document
                        << "$exists" << true
@@ -958,7 +958,7 @@ class MongoDatabase : public DatabaseBackend
         m_log->trace() << "Returning doid " << doid << " to the free pool..." << endl;
 
         try {
-            db["astron.globals"].update_one(
+            db["otp.globals"].update_one(
                 document {} << "_id" << "GLOBALS" << finalize,
                 document {} << "$push" << open_document
                 << "doid.free" << static_cast<int64_t>(doid)

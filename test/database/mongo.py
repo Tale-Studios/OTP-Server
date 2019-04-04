@@ -3,7 +3,7 @@ from socket import socket, AF_INET, SOCK_STREAM
 
 def setup_mongo(unittest):
     # Create temp folder to house database
-    mongo_path = tempfile.mkdtemp(prefix = 'astron-', suffix = '.mongodb')
+    mongo_path = tempfile.mkdtemp(prefix = 'otp-', suffix = '.mongodb')
 
     # Setup an unpriveledged mongo instance
     mongod = subprocess.Popen(['mongod',

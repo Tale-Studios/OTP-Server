@@ -105,7 +105,7 @@ class YAMLDatabase : public OldDatabaseBackend
     {
         // NOTE: This is a hack to get strings to work w/ 32-bit DGs until the DCParser can be
         //       fixed/cleaned-up/rewritten and properly supports parse_string() for 32-bit DGs.
-        #ifdef ASTRON_32BIT_DATAGRAMS
+        #ifdef OTP_32BIT_DATAGRAMS
             const DCAtomicField* atomic = field->as_atomic_field();
             if(atomic)
             {

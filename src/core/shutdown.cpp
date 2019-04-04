@@ -38,10 +38,10 @@ static BOOL handle_interrupt(DWORD)
 
     /*log->info()*/
     cerr << "Received interrupt (Ctrl + C)\n";
-    astron_shutdown(0, false);
+    otp_shutdown(0, false);
     return true;
 }
-void astron_handle_signals()
+void otp_handle_signals()
 {
     SetConsoleCtrlHandler((PHANDLER_ROUTINE)handle_interrupt, true);
 }
@@ -59,9 +59,9 @@ static void handle_interrupt(int)
 
     /*log->info()*/
     cerr << "Received interrupt (Ctrl + C)\n";
-    astron_shutdown(0, false);
+    otp_shutdown(0, false);
 }
-void astron_handle_signals()
+void otp_handle_signals()
 {
     struct sigaction interruptHandler;
     interruptHandler.sa_handler = handle_interrupt;
@@ -73,8 +73,8 @@ void astron_handle_signals()
 #endif
 
 
-// astron_shutdown tells astron to exit gracefully with a given error code
-void astron_shutdown(int code, bool throw_exception)
+// otp_shutdown tells the otp server to exit gracefully with a given error code
+void otp_shutdown(int code, bool throw_exception)
 {
     exit_mtx.lock();
     /*log->info()*/
@@ -85,8 +85,8 @@ void astron_shutdown(int code, bool throw_exception)
     }
 }
 
-// astron_exit_code returns the exit code astron should exit with
-int astron_exit_code()
+// otp_exit_code returns the exit code the otp server should exit with
+int otp_exit_code()
 {
     return exit_code;
 }
@@ -103,5 +103,5 @@ int ShutdownException::exit_code() const
 
 const char* ShutdownException::what() const throw()
 {
-    return "Astron is shutting down.";
+    return "The OTP Server is shutting down.";
 }

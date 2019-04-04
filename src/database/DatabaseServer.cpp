@@ -48,7 +48,7 @@ DatabaseServer::DatabaseServer(RoleConfig roleconfig) : Role(roleconfig),
     if(!m_db_backend) {
         m_log->fatal() << "No database backend of type '"
                        << db_backend_type.get_rval(backend) << "' exists." << endl;
-        astron_shutdown(1);
+        otp_shutdown(1);
     }
 
     // Listen on control channel

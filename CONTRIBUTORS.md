@@ -14,13 +14,13 @@
 >
 > Please keep the list sorted.
 
-Aidan Noll <aidan.noll@gmail.com>  
-Alex Mault <alex@mault.net>  
-Alyssa Rosenzweig (@bobbybee) <j104@rocketmail.com>, <alyssa.a.rosenzweig@gmail.com>  
-Anthony Castelli <neueanthony@me.com>  
-Harvir <harvir14@gmail.com>  
-Jeremy Koletar <jjkoletar@gmail.com>  
-Kevin Stenerson <kestred@riotcave.com>  
-Maverick Mosher <MMavipc@hostedyou.com>  
-Nacib <12ksit@gmail.com>  
-Sam Edwards <cfsworks@gmail.com>  
+Aidan Noll <aidan.noll@gmail.com>
+Alex Mault <alex@mault.net>
+Alyssa Rosenzweig (@bobbybee) <j104@rocketmail.com>, <alyssa.a.rosenzweig@gmail.com>
+Anthony Castelli <neueanthony@me.com>
+Harvir <harvir14@gmail.com>
+Jeremy Koletar <jjkoletar@gmail.com>
+Kevin Stenerson <kestred@riotcave.com>
+Maverick Mosher <MMavipc@hostedyou.com>
+Nacib <12ksit@gmail.com>
+Sam Edwards <cfsworks@gmail.com>

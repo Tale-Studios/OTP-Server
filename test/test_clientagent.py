@@ -2,7 +2,7 @@
 import unittest, time, ssl, struct
 from socket import socket, AF_INET, SOCK_STREAM, error as socket_error
 from common.unittests import ProtocolTest
-from common.astron import *
+from common.otp import *
 from common.dcfile import *
 from common.tls import *
 

@@ -1,4 +1,4 @@
-from astron import *
+from otp import *
 from dcfile import *
 
 CREATE_DOID_OFFSET = 1 + (CHANNEL_SIZE_BYTES * 2) + 2 + 4
@@ -1262,7 +1262,7 @@ class DBServerTestsuite(object):
             ('int64', [88, 0, (1<<63)-1, -1<<63]),
             ('char',  ['H', 'i', '\x00', '\x7f']),
             ('float64', [2.0, 8.7, -32.114]),
-            ('string', ['Hey', 'there', '', 'Astron', 'world']),
+            ('string', ['Hey', 'there', '', 'OTP', 'world']),
             ('blob', ['\x00', '\xffabcdefgh', '', '\x00\x00\x00\x00\x01\x00\x00\x02']),
             ('fixstr', ['a'*32, 'b'*32, 'c'*32]),
             ('fixblob', ['d'*16, 'e'*16, 'f'*16])]:

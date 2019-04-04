@@ -225,7 +225,7 @@ inline ostream& operator<<(ostream& lhs, const uint128_t& rhs)
 }
 }
 
-#ifdef ASTRON_WITH_YAML
+#ifdef OTP_WITH_YAML
 #  include "uint128_yaml.h"
 #endif
 

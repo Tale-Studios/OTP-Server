@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
-project(Astron)
+project(OTPd)
 
 find_package(PythonLibs)
 find_package(PythonInterp)
@@ -32,12 +32,12 @@ if(WIN32)
         add_definitions("/wd4267") # 64-bit size_t complaints
     endif()
 else()
-    option(STATIC_ASTRON "Builds a self-contained Astron binary (Non-Win32 only)" OFF)
+    option(STATIC_OTP "Builds a self-contained OTP binary (Non-Win32 only)" OFF)
 endif()
 
-if(STATIC_ASTRON)
+if(STATIC_OTP)
     # !!! DO NOT SET THIS UNLESS YOU KNOW WHAT YOU'RE DOING !!!
-    # Static Astron builds are still *very* experimental, and there are still issues with linking the C++ Mongo driver in some instances.
+    # Static OTP builds are still *very* experimental, and there are still issues with linking the C++ Mongo driver in some instances.
     set(CMAKE_EXE_LINK_DYNAMIC_C_FLAGS)
     set(CMAKE_EXE_LINK_DYNAMIC_CXX_FLAGS)
     set(CMAKE_SHARED_LIBRARY_C_FLAGS)
@@ -55,7 +55,7 @@ endif()
 set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
     RelWithDebInfo Release Debug)
 
-### Define astron’s git aha for use in program ###
+### Define otp’s git aha for use in program ###
 if(EXISTS "${CMAKE_SOURCE_DIR}/.git")
     find_package(Git)
     if(GIT_FOUND)
@@ -84,7 +84,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 ### Debug Flags -- compile in spam/debug log messages ###
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DASTRON_DEBUG_MESSAGES")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DOTP_DEBUG_MESSAGES")
 
 
 ### OS Specific Settings ###
@@ -106,7 +106,7 @@ message("  ${YAMLCPP_LIBRARY}\n")
 
 set(BUILD_YAML ON) # ON CACHE BOOL "Stuff"
 if(BUILD_YAML)
-    add_definitions(-DASTRON_WITH_YAML)
+    add_definitions(-DOTP_WITH_YAML)
 endif()
 
 # libuv dependency -- required by networking
@@ -123,7 +123,7 @@ include_directories(${Boost_INCLUDE_DIR})
 set(USE_32BIT_DATAGRAMS OFF CACHE BOOL
     "If on, datagrams will use 32-bit length tags instead of 16-bit.")
 if(USE_32BIT_DATAGRAMS)
-    add_definitions(-DASTRON_32BIT_DATAGRAMS)
+    add_definitions(-DOTP_32BIT_DATAGRAMS)
 endif()
 set(USE_32BIT_SIZETAGS OFF CACHE BOOL
     "If on, dclass fields will use 32-bit length tags instead of 16-bit.")
@@ -133,7 +133,7 @@ endif()
 set(USE_128BIT_CHANNELS OFF CACHE BOOL
     "If on, channels will be 128-bit and doids and zones will be 64-bit (instead of 64/32).")
 if(USE_128BIT_CHANNELS)
-    add_definitions(-DASTRON_128BIT_CHANNELS)
+    add_definitions(-DOTP_128BIT_CHANNELS)
 endif()
 
 set(BUILD_TESTS OFF CACHE BOOL "If set to true, test files will be compiled in")
@@ -338,7 +338,7 @@ if(BUILD_CLIENTAGENT)
         src/clientagent/ClientMessages.h
         src/clientagent/ClientFactory.cpp
         src/clientagent/ClientFactory.h
-        src/clientagent/AstronClient.cpp
+        src/clientagent/OTPClient.cpp
     )
     add_test(clientagent "${PYTHON2_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/test/test_clientagent.py")
     add_test(validate_config_clientagent "${PYTHON2_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/test/test_config_clientagent.py")
@@ -411,7 +411,7 @@ include_directories(src)
 add_test(validate_config_core "${PYTHON2_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/test/test_config.py")
 add_test(messagedirector "${PYTHON2_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/test/test_messagedirector.py")
 set(PYTHON_TESTS ${PYTHON_TESTS} messagedirector)
-add_executable(astrond
+add_executable(otp_server
     ${CORE_FILES}
     ${CONFIG_FILES}
     ${MESSAGEDIRECTOR_FILES}
@@ -451,12 +451,12 @@ if(TEST_FILES)
 endif()
 
 ### Header source group ###
-#foreach(sourcefile IN LISTS ASTROND_SOURCES)
+#foreach(sourcefile IN LISTS OTPD_SOURCES)
 #   if(sourcefile MATCHES .*\\.h)
-#       set(ASTROND_HEADERS "${ASTROND_HEADERS} ${sourcefile}")
+#       set(OTPD_HEADERS "${OTPD_HEADERS} ${sourcefile}")
 #   endif()
 #endforeach(sourcefile)
-#source_group("Header Files" FILES ${ASTROND_HEADERS})
+#source_group("Header Files" FILES ${OTPD_HEADERS})
 
 #add_subdirectory(src/dclass)
 add_library(dclass
@@ -465,9 +465,9 @@ add_library(dclass
     src/dclass/dcLexer.cxx
     src/dclass/dcParser.cxx
 )
-add_dependencies(astrond dclass)
-target_link_libraries(astrond dclass ${YAMLCPP_LIBRARY} ${DB_LIBRARY_NAMES} ${LIBUV_LIBRARY} ${EXTRA_LIBS})
-install(TARGETS astrond DESTINATION bin)
+add_dependencies(otp_server dclass)
+target_link_libraries(otp_server dclass ${YAMLCPP_LIBRARY} ${DB_LIBRARY_NAMES} ${LIBUV_LIBRARY} ${EXTRA_LIBS})
+install(TARGETS otp_server DESTINATION bin)
 
 ### Handle some final testing configuration ###
 if(USE_32BIT_DATAGRAMS)
