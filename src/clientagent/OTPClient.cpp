@@ -598,7 +598,8 @@ class OTPClient : public Client, public NetworkHandler
         doid_t do_id = dgi.read_doid();
 
         bool is_owned = m_owned_objects.find(do_id) != m_owned_objects.end();
-        if(!is_owned) {
+        bool is_relocatable = m_objects_relocatable.find(do_id) != m_objects_relocatable.end();
+        if(!is_owned && !is_relocatable) {
             if(is_historical_object(do_id)) {
                 // The client isn't disconnected in this case because it could be a delayed
                 // message, we also have to skip to the end so a disconnect overside_datagram

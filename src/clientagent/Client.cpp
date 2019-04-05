@@ -480,6 +480,14 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
         m_fields_sendable[do_id] = fields;
     }
     break;
+    case CLIENTAGENT_SET_OBJECT_RELOCATABLE: {
+        doid_t do_id = dgi.read_doid();
+
+        m_log->trace() << "Received SetRelocatable for object with id " << do_id << ".\n";
+
+        m_objects_relocatable.insert(do_id);
+    }
+    break;
     case CLIENTAGENT_GET_TLVS: {
         DatagramPtr resp = Datagram::create(sender, m_channel, CLIENTAGENT_GET_TLVS_RESP);
         resp->add_uint32(dgi.read_uint32()); // Context
