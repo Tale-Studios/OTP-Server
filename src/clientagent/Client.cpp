@@ -52,11 +52,12 @@ void Client::annihilate()
     unsubscribe_all();
     m_client_agent->m_ct.free_channel(m_allocated_channel);
 
-    // Delete all session objects
-    while(m_session_objects.size() > 0) {
-        doid_t do_id = *m_session_objects.begin();
-        m_session_objects.erase(do_id);
-        m_log->debug() << "Client exited, deleting session object with id " << do_id << ".\n";
+    // Delete all owned objects
+    while(m_owned_objects.size() > 0) {
+        auto owned_object = *m_owned_objects.begin();
+        doid_t do_id = owned_object.first;
+        m_owned_objects.erase(do_id);
+        m_log->debug() << "Client exited, deleting owned object with id " << do_id << ".\n";
         DatagramPtr dg = Datagram::create(do_id, m_channel, STATESERVER_OBJECT_DELETE_RAM);
         dg->add_doid(do_id);
         route_datagram(dg);
@@ -298,15 +299,10 @@ void Client::close_zones(doid_t parent, const unordered_set<zone_t> &killed_zone
         }
 
         if(killed_zones.find(visible_object.zone) != killed_zones.end()) {
-            if(m_session_objects.find(visible_object.id) != m_session_objects.end()) {
-                // This object is a session object. The client should be disconnected.
-                send_disconnect(CLIENT_DISCONNECT_SESSION_OBJECT_DELETED,
-                                "A session object has unexpectedly left interest.");
-                return;
-            }
+            // Note that owned objects are not deleted here,
+            // as they should be visible regardless of interest.
 
             handle_remove_object(visible_object.id);
-
             m_seen_objects.erase(visible_object.id);
             m_historical_objects.insert(visible_object.id);
             to_remove.push_back(visible_object.id);
@@ -473,33 +469,6 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
         m_fields_sendable[do_id] = fields;
     }
     break;
-    case CLIENTAGENT_ADD_SESSION_OBJECT: {
-        doid_t do_id = dgi.read_doid();
-        if(m_session_objects.find(do_id) != m_session_objects.end()) {
-            m_log->warning() << "Received add session object for existing session object "
-                             << do_id << ".\n";
-            return;
-        }
-
-        m_log->debug() << "Added session object with id " << do_id << ".\n";
-
-        m_session_objects.insert(do_id);
-    }
-    break;
-    case CLIENTAGENT_REMOVE_SESSION_OBJECT: {
-        doid_t do_id = dgi.read_doid();
-
-        if(m_session_objects.find(do_id) == m_session_objects.end()) {
-            m_log->warning() << "Received remove session object for non-session object "
-                             << do_id << ".\n";
-            return;
-        }
-
-        m_log->debug() << "Removed session object with id " << do_id << ".\n";
-
-        m_session_objects.erase(do_id);
-    }
-    break;
     case CLIENTAGENT_GET_TLVS: {
         DatagramPtr resp = Datagram::create(sender, m_channel, CLIENTAGENT_GET_TLVS_RESP);
         resp->add_uint32(dgi.read_uint32()); // Context
@@ -563,16 +532,11 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
             return;
         }
 
-        if(m_session_objects.find(do_id) != m_session_objects.end()) {
-            // We have to erase the object from our session_objects here, because
+        if(m_owned_objects.find(do_id) != m_owned_objects.end()) {
+            // We have to erase the object from our owned_objects here, because
             // the object has already been deleted and we don't want it to be deleted
             // again in the client's destructor.
-            m_session_objects.erase(do_id);
-
-            stringstream ss;
-            ss << "The session object with id " << do_id << " has been unexpectedly deleted.";
-            send_disconnect(CLIENT_DISCONNECT_SESSION_OBJECT_DELETED, ss.str());
-            return;
+            m_owned_objects.erase(do_id);
         }
 
         if(m_seen_objects.find(do_id) != m_seen_objects.end()) {
@@ -708,39 +672,27 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
             return;
         }
 
-        bool session = m_session_objects.find(do_id) != m_session_objects.end();
-
-        if(visible) {
+        if (visible) {
             m_visible_objects[do_id].parent = n_parent;
             m_visible_objects[do_id].zone = n_zone;
         }
 
-        if(owned) {
+        if (owned) {
+            // This is an owned object. Therefore:
+            // - It should be 'visible' to us regardless of interest
+            // - We should keep track of its location
             m_owned_objects[do_id].parent = n_parent;
             m_owned_objects[do_id].zone = n_zone;
+
+            // Fire off CLIENT_OBJECT_LOCATION.
+            handle_change_location(do_id, n_parent, n_zone);
+            return;
         }
 
         // Disable this object if:
         // 1 - We don't have interest in its location (i.e. disable == true)
-        // 2 - It's visible (owned objects may exist without being visible)
-        // 3 - If it's owned, it isn't a session object
+        // 2 - It's already visible to us in the first place
         if(disable && visible) {
-            if(session) {
-                if (owned) {
-                    // Owned session object: do not disable, but send CLIENT_OBJECT_LOCATION
-                    handle_change_location(do_id, n_parent, n_zone);
-                }
-
-                else {
-                    stringstream ss;
-                    ss << "The session object with id " << do_id
-                       << " has unexpectedly left interest.";
-                    send_disconnect(CLIENT_DISCONNECT_SESSION_OBJECT_DELETED, ss.str());
-                }
-
-                return;
-            }
-
             handle_remove_object(do_id);
             m_seen_objects.erase(do_id);
             m_historical_objects.insert(do_id);
@@ -766,15 +718,6 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
         if(m_owned_objects.find(do_id) == m_owned_objects.end()) {
             m_log->error() << "Received ChangingOwner for unowned object with id "
                            << do_id << ".\n";
-            return;
-        }
-
-        // If it's a session object, disconnect the client
-        if(m_session_objects.find(do_id) != m_session_objects.end()) {
-            stringstream ss;
-            ss << "The session object with id " << do_id
-               << " has unexpectedly left ownership.";
-            send_disconnect(CLIENT_DISCONNECT_SESSION_OBJECT_DELETED, ss.str());
             return;
         }
 
@@ -815,8 +758,7 @@ void Client::handle_object_entrance(DatagramIterator &dgi, bool other)
         return;
     }
 
-    if(m_owned_objects.find(do_id) != m_owned_objects.end()
-       && m_session_objects.find(do_id) != m_session_objects.end()) {
+    if(m_owned_objects.find(do_id) != m_owned_objects.end()) {
         return;
     }
 

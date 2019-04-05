@@ -114,10 +114,6 @@ class Client : public MDParticipantInterface
 
     // m_seen_objects is a list of all objects visible through interests
     std::unordered_set<doid_t> m_seen_objects;
-    // m_session_objects is a list of objects that are automatically cleaned up when the
-    // client disconnects.  Additionally, these objects are presumed to be required for the
-    // client, so if one is delete, the client is dropped.
-    std::unordered_set<doid_t> m_session_objects;
     // m_historical_objects is a list of all objects which where previously visible, but have
     // had their visibility removed; a historical object may have become visible again
     std::unordered_set<doid_t> m_historical_objects;
