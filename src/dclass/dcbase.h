@@ -51,7 +51,7 @@
 #include <string>
 #include <assert.h>
 
-// These header files are needed to compile dcLexer.cxx, the output
+// These header files are needed to compile dcLexer.cpp, the output
 // from flex.  flex doesn't create a perfectly windows-friendly source
 // file right out of the box.
 #ifdef WIN32

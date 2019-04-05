@@ -1,4 +1,4 @@
-// Filename: dcArrayParameter.cxx
+// Filename: dcArrayParameter.cpp
 // Created by:  drose (17Jun04)
 //
 ////////////////////////////////////////////////////////////////////

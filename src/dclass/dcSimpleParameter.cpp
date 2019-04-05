@@ -1,4 +1,4 @@
-// Filename: dcSimpleParameter.cxx
+// Filename: dcSimpleParameter.cpp
 // Created by:  drose (15Jun04)
 //
 ////////////////////////////////////////////////////////////////////

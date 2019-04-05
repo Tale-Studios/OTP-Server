@@ -573,14 +573,14 @@ int dcyy_flex_debug = 0;
 #define YY_MORE_ADJ 0
 #define YY_RESTORE_YY_MORE_OFFSET
 char *dcyytext;
-#line 1 "dcLexer.lxx"
+#line 1 "dcLexer.lpp"
 /*
-// Filename: dcLexer.lxx
+// Filename: dcLexer.lpp
 // Created by:  drose (05Oct00)
 //
 ////////////////////////////////////////////////////////////////////
 */
-#line 9 "dcLexer.lxx"
+#line 9 "dcLexer.lpp"
 #include "dcLexerDefs.h"
 #include "dcParserDefs.h"
 #include "dcParser.h"
@@ -1160,7 +1160,7 @@ YY_DECL
 	register char *yy_cp, *yy_bp;
 	register int yy_act;
 
-#line 415 "dcLexer.lxx"
+#line 415 "dcLexer.lpp"
 
 
 
@@ -1257,7 +1257,7 @@ do_action:	/* This label is used only to access EOF actions. */
 case 1:
 /* rule 1 can match eol */
 YY_RULE_SETUP
-#line 425 "dcLexer.lxx"
+#line 425 "dcLexer.lpp"
 {
   // New line.  Save a copy of the line so we can print it out for the
   // benefit of the user in case we get an error.
@@ -1274,7 +1274,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 2:
 YY_RULE_SETUP
-#line 439 "dcLexer.lxx"
+#line 439 "dcLexer.lpp"
 {
   // Eat whitespace.
   accept();
@@ -1282,7 +1282,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 3:
 YY_RULE_SETUP
-#line 444 "dcLexer.lxx"
+#line 444 "dcLexer.lpp"
 {
   // Eat C++-style comments.
   accept();
@@ -1290,7 +1290,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 4:
 YY_RULE_SETUP
-#line 449 "dcLexer.lxx"
+#line 449 "dcLexer.lpp"
 {
   // Eat C-style comments.
   accept();
@@ -1299,7 +1299,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 5:
 YY_RULE_SETUP
-#line 456 "dcLexer.lxx"
+#line 456 "dcLexer.lpp"
 {
   accept();
   return KW_DCLASS;
@@ -1307,7 +1307,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 6:
 YY_RULE_SETUP
-#line 461 "dcLexer.lxx"
+#line 461 "dcLexer.lpp"
 {
   accept();
   return KW_STRUCT;
@@ -1315,7 +1315,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 7:
 YY_RULE_SETUP
-#line 466 "dcLexer.lxx"
+#line 466 "dcLexer.lpp"
 {
   accept();
   return KW_FROM;
@@ -1323,7 +1323,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 8:
 YY_RULE_SETUP
-#line 471 "dcLexer.lxx"
+#line 471 "dcLexer.lpp"
 {
   accept();
   return KW_IMPORT;
@@ -1331,7 +1331,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 9:
 YY_RULE_SETUP
-#line 476 "dcLexer.lxx"
+#line 476 "dcLexer.lpp"
 {
   accept();
   return KW_KEYWORD;
@@ -1339,7 +1339,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 10:
 YY_RULE_SETUP
-#line 481 "dcLexer.lxx"
+#line 481 "dcLexer.lpp"
 {
   accept();
   return KW_TYPEDEF;
@@ -1347,7 +1347,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 11:
 YY_RULE_SETUP
-#line 486 "dcLexer.lxx"
+#line 486 "dcLexer.lpp"
 {
   accept();
   return KW_SWITCH;
@@ -1355,7 +1355,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 12:
 YY_RULE_SETUP
-#line 491 "dcLexer.lxx"
+#line 491 "dcLexer.lpp"
 {
   accept();
   return KW_CASE;
@@ -1363,7 +1363,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 13:
 YY_RULE_SETUP
-#line 496 "dcLexer.lxx"
+#line 496 "dcLexer.lpp"
 {
   accept();
   return KW_DEFAULT;
@@ -1371,7 +1371,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 14:
 YY_RULE_SETUP
-#line 501 "dcLexer.lxx"
+#line 501 "dcLexer.lpp"
 {
   accept();
   return KW_BREAK;
@@ -1379,7 +1379,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 15:
 YY_RULE_SETUP
-#line 506 "dcLexer.lxx"
+#line 506 "dcLexer.lpp"
 {
   accept();
   return KW_INT8;
@@ -1387,7 +1387,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 16:
 YY_RULE_SETUP
-#line 511 "dcLexer.lxx"
+#line 511 "dcLexer.lpp"
 {
   accept();
   return KW_INT16;
@@ -1395,7 +1395,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 17:
 YY_RULE_SETUP
-#line 516 "dcLexer.lxx"
+#line 516 "dcLexer.lpp"
 {
   accept();
   return KW_INT32;
@@ -1403,7 +1403,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 18:
 YY_RULE_SETUP
-#line 521 "dcLexer.lxx"
+#line 521 "dcLexer.lpp"
 {
   accept();
   return KW_INT64;
@@ -1411,7 +1411,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 19:
 YY_RULE_SETUP
-#line 526 "dcLexer.lxx"
+#line 526 "dcLexer.lpp"
 {
   accept();
   return KW_UINT8;
@@ -1419,7 +1419,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 20:
 YY_RULE_SETUP
-#line 531 "dcLexer.lxx"
+#line 531 "dcLexer.lpp"
 {
   accept();
   return KW_UINT16;
@@ -1427,7 +1427,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 21:
 YY_RULE_SETUP
-#line 536 "dcLexer.lxx"
+#line 536 "dcLexer.lpp"
 {
   accept();
   return KW_UINT32;
@@ -1435,7 +1435,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 22:
 YY_RULE_SETUP
-#line 541 "dcLexer.lxx"
+#line 541 "dcLexer.lpp"
 {
   accept();
   return KW_UINT64;
@@ -1443,7 +1443,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 23:
 YY_RULE_SETUP
-#line 546 "dcLexer.lxx"
+#line 546 "dcLexer.lpp"
 {
   accept();
   return KW_FLOAT64;
@@ -1451,7 +1451,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 24:
 YY_RULE_SETUP
-#line 551 "dcLexer.lxx"
+#line 551 "dcLexer.lpp"
 {
   accept();
   return KW_STRING;
@@ -1459,7 +1459,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 25:
 YY_RULE_SETUP
-#line 556 "dcLexer.lxx"
+#line 556 "dcLexer.lpp"
 {
   accept();
   return KW_BLOB;
@@ -1467,7 +1467,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 26:
 YY_RULE_SETUP
-#line 561 "dcLexer.lxx"
+#line 561 "dcLexer.lpp"
 {
   accept();
   return KW_BLOB32;
@@ -1475,7 +1475,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 27:
 YY_RULE_SETUP
-#line 566 "dcLexer.lxx"
+#line 566 "dcLexer.lpp"
 {
   accept();
   return KW_INT8ARRAY;
@@ -1483,7 +1483,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 28:
 YY_RULE_SETUP
-#line 571 "dcLexer.lxx"
+#line 571 "dcLexer.lpp"
 {
   accept();
   return KW_INT16ARRAY;
@@ -1491,7 +1491,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 29:
 YY_RULE_SETUP
-#line 576 "dcLexer.lxx"
+#line 576 "dcLexer.lpp"
 {
   accept();
   return KW_INT32ARRAY;
@@ -1499,7 +1499,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 30:
 YY_RULE_SETUP
-#line 581 "dcLexer.lxx"
+#line 581 "dcLexer.lpp"
 {
   accept();
   return KW_UINT8ARRAY;
@@ -1507,7 +1507,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 31:
 YY_RULE_SETUP
-#line 586 "dcLexer.lxx"
+#line 586 "dcLexer.lpp"
 {
   accept();
   return KW_UINT16ARRAY;
@@ -1515,7 +1515,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 32:
 YY_RULE_SETUP
-#line 591 "dcLexer.lxx"
+#line 591 "dcLexer.lpp"
 {
   accept();
   return KW_UINT32ARRAY;
@@ -1523,7 +1523,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 33:
 YY_RULE_SETUP
-#line 596 "dcLexer.lxx"
+#line 596 "dcLexer.lpp"
 {
   accept();
   return KW_UINT32UINT8ARRAY;
@@ -1531,7 +1531,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 34:
 YY_RULE_SETUP
-#line 601 "dcLexer.lxx"
+#line 601 "dcLexer.lpp"
 {
   accept();
   return KW_CHAR;
@@ -1539,7 +1539,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 35:
 YY_RULE_SETUP
-#line 606 "dcLexer.lxx"
+#line 606 "dcLexer.lpp"
 {
   // An unsigned integer number.
   accept();
@@ -1565,7 +1565,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 36:
 YY_RULE_SETUP
-#line 629 "dcLexer.lxx"
+#line 629 "dcLexer.lpp"
 {
   // A signed integer number.
   accept();
@@ -1614,7 +1614,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 37:
 YY_RULE_SETUP
-#line 675 "dcLexer.lxx"
+#line 675 "dcLexer.lpp"
 {
   // A hexadecimal integer number.
   accept();
@@ -1644,7 +1644,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 38:
 YY_RULE_SETUP
-#line 702 "dcLexer.lxx"
+#line 702 "dcLexer.lpp"
 {
   // A floating-point number.
   accept();
@@ -1655,7 +1655,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 39:
 YY_RULE_SETUP
-#line 710 "dcLexer.lxx"
+#line 710 "dcLexer.lpp"
 {
   // Quoted string.
   accept();
@@ -1665,7 +1665,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 40:
 YY_RULE_SETUP
-#line 717 "dcLexer.lxx"
+#line 717 "dcLexer.lpp"
 {
   // Single-quoted string.
   accept();
@@ -1675,7 +1675,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 41:
 YY_RULE_SETUP
-#line 724 "dcLexer.lxx"
+#line 724 "dcLexer.lpp"
 {
   // Long hex string.
   accept();
@@ -1685,7 +1685,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 42:
 YY_RULE_SETUP
-#line 731 "dcLexer.lxx"
+#line 731 "dcLexer.lpp"
 {
   // Identifier or keyword.
   accept();
@@ -1703,7 +1703,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 43:
 YY_RULE_SETUP
-#line 747 "dcLexer.lxx"
+#line 747 "dcLexer.lpp"
 {
   // Send any other printable character as itself.
   accept();
@@ -1712,7 +1712,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 44:
 YY_RULE_SETUP
-#line 753 "dcLexer.lxx"
+#line 753 "dcLexer.lpp"
 ECHO;
 	YY_BREAK
 #line 1721 "lex.yy.c"
@@ -2713,4 +2713,4 @@ void dcyyfree (void * ptr )
 
 #define YYTABLES_NAME "yytables"
 
-#line 753 "dcLexer.lxx"
+#line 753 "dcLexer.lpp"

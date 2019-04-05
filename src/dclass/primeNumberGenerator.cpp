@@ -1,4 +1,4 @@
-// Filename: primeNumberGenerator.cxx
+// Filename: primeNumberGenerator.cpp
 // Created by:  drose (22Mar01)
 //
 ////////////////////////////////////////////////////////////////////

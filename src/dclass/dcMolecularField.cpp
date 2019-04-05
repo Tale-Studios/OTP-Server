@@ -1,4 +1,4 @@
-// Filename: dcMolecularField.cxx
+// Filename: dcMolecularField.cpp
 // Created by:  drose (05Oct00)
 //
 ////////////////////////////////////////////////////////////////////

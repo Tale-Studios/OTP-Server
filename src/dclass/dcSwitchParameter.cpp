@@ -1,4 +1,4 @@
-// Filename: dcSwitchParameter.cxx
+// Filename: dcSwitchParameter.cpp
 // Created by:  drose (18Jun04)
 //
 ////////////////////////////////////////////////////////////////////

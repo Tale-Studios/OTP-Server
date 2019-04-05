@@ -1,4 +1,4 @@
-// Filename: dcSubatomicType.cxx
+// Filename: dcSubatomicType.cpp
 // Created by:  drose (05Oct00)
 //
 ////////////////////////////////////////////////////////////////////

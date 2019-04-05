@@ -1,4 +1,4 @@
-// Filename: dcPackerCatalog.cxx
+// Filename: dcPackerCatalog.cpp
 // Created by:  drose (21Jun04)
 //
 ////////////////////////////////////////////////////////////////////

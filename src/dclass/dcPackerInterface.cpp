@@ -1,4 +1,4 @@
-// Filename: dcPackerInterface.cxx
+// Filename: dcPackerInterface.cpp
 // Created by:  drose (15Jun04)
 //
 ////////////////////////////////////////////////////////////////////

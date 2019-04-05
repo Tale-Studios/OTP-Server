@@ -1,4 +1,4 @@
-// Filename: dcClassParameter.cxx
+// Filename: dcClassParameter.cpp
 // Created by:  drose (18Jun04)
 //
 ////////////////////////////////////////////////////////////////////

@@ -460,10 +460,10 @@ endif()
 
 #add_subdirectory(src/dclass)
 add_library(dclass
-    src/dclass/p3dcparser_composite1.cxx
-    src/dclass/p3dcparser_composite2.cxx
-    src/dclass/dcLexer.cxx
-    src/dclass/dcParser.cxx
+    src/dclass/p3dcparser_composite1.cpp
+    src/dclass/p3dcparser_composite2.cpp
+    src/dclass/dcLexer.cpp
+    src/dclass/dcParser.cpp
 )
 add_dependencies(otp_server dclass)
 target_link_libraries(otp_server dclass ${YAMLCPP_LIBRARY} ${DB_LIBRARY_NAMES} ${LIBUV_LIBRARY} ${EXTRA_LIBS})
