@@ -305,8 +305,13 @@ void Client::close_zones(doid_t parent, const unordered_set<zone_t> &killed_zone
         }
 
         if(killed_zones.find(visible_object.zone) != killed_zones.end()) {
-            // Note that owned objects are not deleted here,
-            // as they should be visible regardless of interest.
+            // Unless the object is owned (in which case it needs
+            // to stay in visibility regardless), we can go ahead
+            // and start removing our visibility of the object.
+            if (m_owned_objects.find(visible_object.id) != m_owned_objects.end())
+            {
+                continue;
+            }
 
             handle_remove_object(visible_object.id);
             m_seen_objects.erase(visible_object.id);
