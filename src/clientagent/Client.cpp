@@ -818,21 +818,33 @@ InterestOperation::InterestOperation(
     m_timeout_interval(timeout)
 {
     m_callers.insert(m_callers.end(), caller);
-
-    this->finish(true);
+    m_client->generate_timeout(bind(&InterestOperation::on_timeout_generate, this,
+                               std::placeholders::_1));
 }
 
 InterestOperation::~InterestOperation()
 {
-    delete this;
+    if (!m_finished)
+    {
+        m_client->m_log->warning() << "Interest operation failed; deleting.\n";
+        delete this;
+    }
 }
 
 void InterestOperation::on_timeout_generate(Timeout* timeout)
 {
+    assert(std::this_thread::get_id() == g_main_thread_id);
+
+    m_timeout = timeout;
+    m_timeout->initialize(m_timeout_interval, bind(&InterestOperation::timeout, this));
+    m_timeout->start();
 }
 
 void InterestOperation::timeout()
 {
+    lock_guard<recursive_mutex> lock(m_client->m_client_lock);
+    m_client->m_log->warning() << "Interest operation timed out; forcing.\n";
+    finish(true);
 }
 
 void InterestOperation::finish(bool is_timeout)
@@ -862,6 +874,7 @@ void InterestOperation::finish(bool is_timeout)
     }
 
     // Distribute the interest done message
+    m_client->notify_interest_done(this);
     m_client->handle_interest_done(m_interest_id, m_client_context);
 
     // N. B. We need to delete the pending interest before we send queued
@@ -878,6 +891,10 @@ void InterestOperation::finish(bool is_timeout)
         dgi.seek_payload();
         m_client->handle_datagram(it, dgi);
     }
+
+    m_finished = true;
+
+    delete this;
 }
 
 bool InterestOperation::is_ready()

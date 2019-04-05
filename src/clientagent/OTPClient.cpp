@@ -23,7 +23,7 @@ static ConfigVariable<bool> send_version_to_client("send_version", true, otpclie
 
 static ConfigVariable<uint64_t> write_buffer_size("write_buffer_size", 256 * 1024,
         otpclient_config);
-static ConfigVariable<unsigned int> write_timeout_ms("write_timeout_ms", 5000, otpclient_config);
+static ConfigVariable<unsigned int> write_timeout_ms("write_timeout_ms", 6000, otpclient_config);
 
 //by default, have heartbeat disabled.
 static ConfigVariable<long> heartbeat_timeout_config("heartbeat_timeout", 0, otpclient_config);

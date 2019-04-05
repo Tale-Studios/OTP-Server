@@ -181,7 +181,6 @@ class Client : public MDParticipantInterface
     // since been deleted.  The return is still true even if the object has become visible again.
     bool is_historical_object(doid_t do_id);
 
-
     // handle_object_entrance is a common handler for object entrance. the DGI should be positioned
     // at the start of the do_id parameter
     void handle_object_entrance(DatagramIterator &dgi, bool other);
