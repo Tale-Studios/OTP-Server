@@ -66,8 +66,8 @@ class InterestOperation
     uint32_t m_client_context;
     uint32_t m_request_context;
     doid_t m_parent;
+    channel_t m_caller;
     std::unordered_set<zone_t> m_zones;
-    std::unordered_set<channel_t> m_callers;
 
     unsigned long m_timeout_interval;
     Timeout* m_timeout = nullptr;
@@ -260,6 +260,5 @@ class Client : public MDParticipantInterface
     // notify_interest_done send a CLIENTAGENT_DONE_INTEREST_RESP to the
     // interest operation's caller, if one has been set.
     void notify_interest_done(uint16_t interest_id, channel_t caller);
-    void notify_interest_done(const InterestOperation* iop);
     bool m_is_generating_timeouts = false;
 };

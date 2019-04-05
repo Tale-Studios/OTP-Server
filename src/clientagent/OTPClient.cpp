@@ -649,7 +649,7 @@ class OTPClient : public Client, public NetworkHandler
             send_disconnect(CLIENT_DISCONNECT_FORBIDDEN_INTEREST, ss.str(), true);
             return;
         }
-        add_interest(i, context);
+        add_interest(i, context, m_channel);
     }
 
     // handle_client_remove_interest is called when the client removes an interest.

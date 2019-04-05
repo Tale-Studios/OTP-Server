@@ -235,11 +235,17 @@ void Client::add_interest(Interest &i, uint32_t context, channel_t caller)
 
     if(new_zones.empty()) {
         // We aren't requesting any new zones with this operation, so don't
-        // bother firing off a State Server request. Instead, let the client
+        // bother firing off a State Server request. Instead, let the caller
         // know we're already done:
 
-        notify_interest_done(i.id, caller);
-        handle_interest_done(i.id, context);
+        if (caller == m_channel)
+        {
+            handle_interest_done(i.id, context);
+        }
+        else
+        {
+            notify_interest_done(i.id, caller);
+        }
 
         return;
     }
@@ -779,27 +785,13 @@ void Client::handle_object_entrance(DatagramIterator &dgi, bool other)
 // interest operation's caller, if one has been set.
 void Client::notify_interest_done(uint16_t interest_id, channel_t caller)
 {
-    if(caller == 0) {
+    if (caller == 0) {
         return;
     }
 
     DatagramPtr resp = Datagram::create(caller, m_channel, CLIENTAGENT_DONE_INTEREST_RESP);
     resp->add_channel(m_channel);
     resp->add_uint16(interest_id);
-    route_datagram(resp);
-}
-
-// notify_interest_done send a CLIENTAGENT_DONE_INTEREST_RESP to the
-// interest operation's caller, if one has been set.
-void Client::notify_interest_done(const InterestOperation* iop)
-{
-    if(iop->m_callers.size() == 0) {
-        return;
-    }
-
-    DatagramPtr resp = Datagram::create(iop->m_callers, m_channel, CLIENTAGENT_DONE_INTEREST_RESP);
-    resp->add_channel(m_channel);
-    resp->add_uint16(iop->m_interest_id);
     route_datagram(resp);
 }
 
@@ -815,9 +807,9 @@ InterestOperation::InterestOperation(
     m_client_context(client_context),
     m_request_context(request_context),
     m_parent(parent), m_zones(zones),
+    m_caller(caller),
     m_timeout_interval(timeout)
 {
-    m_callers.insert(m_callers.end(), caller);
     m_client->generate_timeout(bind(&InterestOperation::on_timeout_generate, this,
                                std::placeholders::_1));
 }
@@ -874,8 +866,14 @@ void InterestOperation::finish(bool is_timeout)
     }
 
     // Distribute the interest done message
-    m_client->notify_interest_done(this);
-    m_client->handle_interest_done(m_interest_id, m_client_context);
+    if (m_caller == m_client->m_channel)
+    {
+        m_client->handle_interest_done(m_interest_id, m_client_context);
+    }
+    else
+    {
+        m_client->notify_interest_done(m_interest_id, m_caller);
+    }
 
     // N. B. We need to delete the pending interest before we send queued
     //       datagrams, so that they aren't just re-added to the queue.
