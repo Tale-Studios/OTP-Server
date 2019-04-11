@@ -85,7 +85,7 @@ endif()
 
 ### Debug Flags -- compile in spam/debug log messages ###
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DOTP_DEBUG_MESSAGES")
-
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -DOTP_DEBUG_MESSAGES")
 
 ### OS Specific Settings ###
 if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")  ### Windows requires winsock

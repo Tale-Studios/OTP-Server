@@ -8,8 +8,6 @@ Group, and used in-house from 2001 until 2013. Credit for the OTP server goes to
 The suite consists of many components, which handle separate tasks in order to distribute
 the workload of managing a multi-sharded game/application environment with many objects and clients.
 
-[![Build Status](https://travis-ci.org/OTP/OTP.svg?branch=master)](https://travis-ci.org/OTP/OTP)
-
 ## Overview ##
 
 ### Objects ###

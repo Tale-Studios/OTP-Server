@@ -74,9 +74,7 @@ class InterestOperation
 
     bool m_has_total = false;
     doid_t m_total = 0; // as doid_t because <max_objs_in_zones> == <max_total_objs>
-
-    std::vector<DatagramHandle> m_pending_generates;
-    std::vector<DatagramHandle> m_pending_datagrams;
+    doid_t m_generated_objects = 0;
 
     InterestOperation(Client *client, unsigned long timeout,
                       uint16_t interest_id, uint32_t client_context, uint32_t request_context,
@@ -85,8 +83,7 @@ class InterestOperation
 
     bool is_ready();
     void set_expected(doid_t total);
-    void queue_expected(DatagramHandle dg);
-    void queue_datagram(DatagramHandle dg);
+    void add_object(doid_t object);
     void finish(bool is_timeout = false);
     void on_timeout_generate(Timeout* timeout);
     void timeout();
@@ -123,8 +120,6 @@ class Client : public MDParticipantInterface
     std::unordered_map<doid_t, DeclaredObject> m_declared_objects;
     // m_owned_objects is a map of all owned objects to their metadata
     std::unordered_map<doid_t, OwnedObject> m_owned_objects;
-    // m_pending_objects is a map of doids for objects that we need to buffer dg's for
-    std::unordered_map<doid_t, uint32_t> m_pending_objects;
 
     // m_interests is a map of interest ids to interests.
     std::unordered_map<uint16_t, Interest> m_interests;
@@ -186,10 +181,6 @@ class Client : public MDParticipantInterface
     // handle_object_entrance is a common handler for object entrance. the DGI should be positioned
     // at the start of the do_id parameter
     void handle_object_entrance(DatagramIterator &dgi, bool other);
-
-    // try_queue_pending checks the object against m_pending_objects, and if the objects is
-    // involved in a pending iop, queues the datagram for later sending, and returns true
-    inline bool try_queue_pending(doid_t do_id, DatagramHandle dg);
 
     /* Client Interface */
     // send_disconnect must close any connections with a connected client; the given reason and

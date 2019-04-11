@@ -16,7 +16,7 @@ static ConfigVariable<std::string> bind_addr("bind", "unspecified", md_config);
 static ConfigVariable<std::string> connect_addr("connect", "unspecified", md_config);
 static ValidAddressConstraint valid_bind_addr(bind_addr);
 static ValidAddressConstraint valid_connect_addr(connect_addr);
-static ConfigVariable<bool> threaded_mode("threaded", true, md_config);
+static ConfigVariable<bool> threaded_mode("threaded", false, md_config);
 
 static ConfigGroup daemon_config("daemon");
 static ConfigVariable<std::string> daemon_name("name", "<unnamed>", daemon_config);
@@ -136,7 +136,7 @@ void MessageDirector::flush_queue()
     }
 
     m_main_is_routing = true;
-    
+
     {
         std::unique_lock<std::mutex> lock(m_messages_lock);
 

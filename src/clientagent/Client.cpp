@@ -508,9 +508,6 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
     case STATESERVER_OBJECT_SET_FIELD: {
         doid_t do_id = dgi.read_doid();
         if(!lookup_object(do_id)) {
-            if(try_queue_pending(do_id, in_dg)) {
-                return;
-            }
             m_log->warning() << "Received server-side field update for unknown object "
                              << do_id << ".\n";
             return;
@@ -524,9 +521,6 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
     case STATESERVER_OBJECT_SET_FIELDS: {
         doid_t do_id = dgi.read_doid();
         if(!lookup_object(do_id)) {
-            if(try_queue_pending(do_id, in_dg)) {
-                return;
-            }
             m_log->warning() << "Received server-side multi-field update for unknown object "
                              << do_id << ".\n";
             return;
@@ -543,9 +537,6 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
         m_log->trace() << "Received DeleteRam for object with id " << do_id << "\n.";
 
         if(!lookup_object(do_id)) {
-            if(try_queue_pending(do_id, in_dg)) {
-                return;
-            }
             m_log->warning() << "Received server-side object delete for unknown object "
                              << do_id << ".\n";
             return;
@@ -598,46 +589,26 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
         doid_t do_id = dgi.read_doid();
         doid_t parent = dgi.read_doid();
         zone_t zone = dgi.read_zone();
+
+        bool with_other = (msgtype == STATESERVER_OBJECT_ENTER_LOCATION_WITH_REQUIRED_OTHER);
+
         for(auto& it : m_pending_interests) {
             InterestOperation *interest_operation = it.second;
             if(interest_operation->m_parent == parent &&
                interest_operation->m_zones.find(zone) != interest_operation->m_zones.end()) {
 
-                interest_operation->queue_datagram(in_dg);
-
-                // Add the DoId to m_pending_objects, because while it's not an object
-                // from opening the interest, we should begin queueing messages for it
-                m_pending_objects.emplace(do_id, it.first);
-
-                return;
+                // Notify the IOP of this object's existence, so that the operation
+                // can know which object is generated and which objects aren't.
+                interest_operation->add_object(do_id);
             }
         }
 
-        // Object entrance doesn't pertain to any pending iop,
-        // so seek back to where we started and handle it normally
+        // Seek back to where we started and handle the message.
         dgi.seek_payload();
         dgi.skip(sizeof(channel_t) + sizeof(uint16_t)); // sender + msgtype
 
-        bool with_other = (msgtype == STATESERVER_OBJECT_ENTER_LOCATION_WITH_REQUIRED_OTHER);
+        // Generate the object.
         handle_object_entrance(dgi, with_other);
-    }
-    break;
-    case STATESERVER_OBJECT_ENTER_INTEREST_WITH_REQUIRED:
-    case STATESERVER_OBJECT_ENTER_INTEREST_WITH_REQUIRED_OTHER: {
-        uint32_t request_context = dgi.read_uint32();
-        auto it = m_pending_interests.find(request_context);
-        if(it == m_pending_interests.end()) {
-            m_log->warning() << "Received object entrance into interest with unknown context "
-                             << request_context << ".\n";
-            return;
-        }
-
-        m_pending_objects.emplace(dgi.read_doid(), request_context);
-        it->second->queue_expected(in_dg);
-        if(it->second->is_ready()) {
-            it->second->finish();
-        }
-        return;
     }
     break;
     case STATESERVER_OBJECT_GET_ZONES_COUNT_RESP: {
@@ -660,12 +631,6 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
     break;
     case STATESERVER_OBJECT_CHANGING_LOCATION: {
         doid_t do_id = dgi.read_doid();
-        if(try_queue_pending(do_id, in_dg)) {
-            // We received a generate for this object, and the generate is sitting in a pending iop
-            // we'll just store this dg under the m_pending_datagrams queue on the iop
-            return;
-        }
-
         doid_t n_parent = dgi.read_doid();
         zone_t n_zone = dgi.read_zone();
 
@@ -751,27 +716,12 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
     }
 }
 
-bool Client::try_queue_pending(doid_t do_id, DatagramHandle dg)
-{
-    auto it = m_pending_objects.find(do_id);
-    if(it != m_pending_objects.end()) {
-        // the dg should be queued under the appropriate iop
-        m_pending_interests.find(it->second)->second->queue_datagram(dg);
-        return true;
-    }
-    // still no idea what do_id was being talked about
-    return false;
-}
-
 void Client::handle_object_entrance(DatagramIterator &dgi, bool other)
 {
     doid_t do_id = dgi.read_doid();
     doid_t parent = dgi.read_doid();
     zone_t zone = dgi.read_zone();
     uint16_t dc_id = dgi.read_uint16();
-
-    // this object is no longer pending
-    m_pending_objects.erase(do_id);
 
     if(m_seen_objects.find(do_id) != m_seen_objects.end()) {
         return;
@@ -789,6 +739,8 @@ void Client::handle_object_entrance(DatagramIterator &dgi, bool other)
         obj.zone = zone;
         m_visible_objects[do_id] = obj;
     }
+
+    // Insert the object into our seen objects.
     m_seen_objects.insert(do_id);
 
     handle_add_object(do_id, parent, zone, dc_id, dgi, other);
@@ -865,20 +817,7 @@ void InterestOperation::finish(bool is_timeout)
         m_timeout = nullptr;
     }
 
-    // Send objects in the initial snapshot
-    for(const auto& it : m_pending_generates) {
-        DatagramIterator dgi(it);
-        dgi.seek_payload();
-        dgi.skip(sizeof(channel_t)); // skip sender
-
-        uint16_t msgtype = dgi.read_uint16();
-        bool with_other = (msgtype == STATESERVER_OBJECT_ENTER_INTEREST_WITH_REQUIRED_OTHER);
-
-        dgi.skip(sizeof(uint32_t)); // skip request_context
-        m_client->handle_object_entrance(dgi, with_other);
-    }
-
-    // Distribute the interest done message
+    // Distribute the interest done message.
     if (m_caller == m_client->m_channel)
     {
         m_client->handle_interest_done(m_interest_id, m_client_context);
@@ -888,20 +827,8 @@ void InterestOperation::finish(bool is_timeout)
         m_client->notify_interest_done(m_interest_id, m_caller);
     }
 
-    // N. B. We need to delete the pending interest before we send queued
-    //       datagrams, so that they aren't just re-added to the queue.
-    //       Move the queued datagrams to the stack so it is safe to delete the Operation.
-    vector<DatagramHandle> dispatch = move(m_pending_datagrams);
-
-    // Delete the Interest Operation
+    // Delete the Interest Operation.
     m_client->m_pending_interests.erase(m_request_context);
-
-    // Dispatch other received and queued messages
-    for(const auto& it : dispatch) {
-        DatagramIterator dgi(it);
-        dgi.seek_payload();
-        m_client->handle_datagram(it, dgi);
-    }
 
     m_finished = true;
 
@@ -910,7 +837,7 @@ void InterestOperation::finish(bool is_timeout)
 
 bool InterestOperation::is_ready()
 {
-    return m_has_total && m_pending_generates.size() >= m_total;
+    return m_has_total && m_generated_objects >= m_total;
 }
 
 void InterestOperation::set_expected(doid_t total)
@@ -921,12 +848,15 @@ void InterestOperation::set_expected(doid_t total)
     }
 }
 
-void InterestOperation::queue_expected(DatagramHandle dg)
+void InterestOperation::add_object(doid_t do_id)
 {
-    m_pending_generates.push_back(dg);
-}
+    // One of our interested objects is being generated.
+    // Increment our m_generated_objects, and check if we're ready to finish.
+    m_generated_objects++;
 
-void InterestOperation::queue_datagram(DatagramHandle dg)
-{
-    m_pending_datagrams.push_back(dg);
+    // If all of our objects are now generated, finish.
+    if (is_ready())
+    {
+        finish(false);
+    }
 }

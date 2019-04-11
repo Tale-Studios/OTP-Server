@@ -126,21 +126,6 @@ void DistributedObject::append_other_data(DatagramPtr dg, bool client_only, bool
     }
 }
 
-
-
-void DistributedObject::send_interest_entry(channel_t location, uint32_t context)
-{
-    DatagramPtr dg = Datagram::create(location, m_do_id, m_ram_fields.size() ?
-                                      STATESERVER_OBJECT_ENTER_INTEREST_WITH_REQUIRED_OTHER :
-                                      STATESERVER_OBJECT_ENTER_INTEREST_WITH_REQUIRED);
-    dg->add_uint32(context);
-    append_required_data(dg, true);
-    if(m_ram_fields.size()) {
-        append_other_data(dg, true);
-    }
-    route_datagram(dg);
-}
-
 void DistributedObject::send_location_entry(channel_t location)
 {
     DatagramPtr dg = Datagram::create(location, m_do_id, m_ram_fields.size() ?
@@ -758,9 +743,8 @@ void DistributedObject::handle_datagram(DatagramHandle, DatagramIterator &dgi)
     }
     case STATESERVER_OBJECT_GET_ZONE_OBJECTS:
     case STATESERVER_OBJECT_GET_ZONES_OBJECTS: {
-        uint32_t context  = dgi.read_uint32();
+        uint32_t context = dgi.read_uint32();
         doid_t queried_parent = dgi.read_doid();
-
 
         m_log->trace() << "Handling get_zones_objects with parent '" << queried_parent << "'"
                        << ".  My id is " << m_do_id << " and my parent is " << m_parent_id
@@ -776,18 +760,9 @@ void DistributedObject::handle_datagram(DatagramHandle, DatagramIterator &dgi)
             // and if so, reply:
             for(uint16_t i = 0; i < zone_count; ++i) {
                 if(dgi.read_zone() == m_zone_id) {
-                    // The parent forwarding this request down to us may or may
-                    // not yet know about our presence (and therefore have us
-                    // included in the count that it sent to the interested
-                    // peer). If we are included in this count, we reply with a
-                    // normal interest entry. If not, we reply with a standard
-                    // location entry and allow the interested peer to resolve
-                    // the difference itself.
-                    if(m_parent_synchronized) {
-                        send_interest_entry(sender, context);
-                    } else {
-                        send_location_entry(sender);
-                    }
+                    // Reply with a location entry to notify the interested peer
+                    // of our presence.
+                    send_location_entry(sender);
                     break;
                 }
             }
