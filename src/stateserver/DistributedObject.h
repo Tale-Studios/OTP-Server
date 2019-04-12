@@ -53,6 +53,7 @@ class DistributedObject : public MDParticipantInterface
     channel_t m_owner_channel;
     bool m_ai_explicitly_set;
     bool m_parent_synchronized;
+    bool m_deletion_process = false;
     uint32_t m_next_context;
     std::unordered_map<zone_t, std::unordered_set<doid_t>> m_zone_objects;
     LogCategory *m_log;
@@ -68,8 +69,9 @@ class DistributedObject : public MDParticipantInterface
     void handle_location_change(doid_t new_parent, zone_t new_zone, channel_t sender);
     void handle_ai_change(channel_t new_ai, channel_t sender, bool channel_is_explicit);
 
-    void annihilate(channel_t sender, bool notify_parent = true);
-    void delete_children(channel_t sender);
+    void begin_delete();
+    void finish_delete(bool notify_parent = false);
+    void delete_children();
 
     void wake_children(); // ask all children for their locations
 

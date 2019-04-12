@@ -285,19 +285,45 @@ void DistributedObject::handle_ai_change(channel_t new_ai, channel_t sender,
 
 }
 
-void DistributedObject::annihilate(channel_t sender, bool notify_parent)
+void DistributedObject::begin_delete()
+{
+    if(m_parent_id) {
+        // Leave parent on explicit delete ram
+        DatagramPtr dg = Datagram::create(m_parent_id, m_do_id, STATESERVER_OBJECT_CHANGING_LOCATION);
+        dg->add_doid(m_do_id);
+        dg->add_location(INVALID_DO_ID, 0);
+        dg->add_location(m_parent_id, m_zone_id);
+        route_datagram(dg);
+    }
+
+    if(m_zone_objects.empty()) {
+        // We have no children. We can finish the deletion process now.
+        if(m_parent_id) {
+            // However, if we have a parent, we need to acknowledge
+            // our deletion.
+            DatagramPtr dg = Datagram::create(m_parent_id, m_do_id, STATESERVER_OBJECT_DELETE_RAM);
+            dg->add_doid(m_do_id);
+            route_datagram(dg);
+        }
+        finish_delete();
+        return;
+    }
+
+    m_deletion_process = true;
+    delete_children();
+}
+
+void DistributedObject::finish_delete(bool notify_parent)
 {
     unordered_set<channel_t> targets;
     if(m_parent_id) {
-        targets.insert(location_as_channel(m_parent_id, m_zone_id));
-        // Leave parent on explicit delete ram
         if(notify_parent) {
-            DatagramPtr dg = Datagram::create(m_parent_id, sender, STATESERVER_OBJECT_CHANGING_LOCATION);
+            // We do have a parent and need to acknowledge our own deletion.
+            DatagramPtr dg = Datagram::create(m_parent_id, m_do_id, STATESERVER_OBJECT_DELETE_RAM);
             dg->add_doid(m_do_id);
-            dg->add_location(INVALID_DO_ID, 0);
-            dg->add_location(m_parent_id, m_zone_id);
             route_datagram(dg);
         }
+        targets.insert(location_as_channel(m_parent_id, m_zone_id));
     }
     if(m_owner_channel) {
         targets.insert(m_owner_channel);
@@ -305,11 +331,10 @@ void DistributedObject::annihilate(channel_t sender, bool notify_parent)
     if(m_ai_channel) {
         targets.insert(m_ai_channel);
     }
-    DatagramPtr dg = Datagram::create(targets, sender, STATESERVER_OBJECT_DELETE_RAM);
+
+    DatagramPtr dg = Datagram::create(targets, m_do_id, STATESERVER_OBJECT_DELETE_RAM);
     dg->add_doid(m_do_id);
     route_datagram(dg);
-
-    delete_children(sender);
 
     m_stateserver->m_objs.erase(m_do_id);
     m_log->debug() << "Deleted.\n";
@@ -317,15 +342,12 @@ void DistributedObject::annihilate(channel_t sender, bool notify_parent)
     terminate();
 }
 
-void DistributedObject::delete_children(channel_t sender)
+void DistributedObject::delete_children()
 {
-    if(!m_zone_objects.empty()) {
-        // We have at least one child, so we want to notify the children as well
-        DatagramPtr dg = Datagram::create(parent_to_children(m_do_id), sender,
-                                          STATESERVER_OBJECT_DELETE_CHILDREN);
-        dg->add_doid(m_do_id);
-        route_datagram(dg);
-    }
+    // We have at least one child, so we want to notify the children as well.
+    DatagramPtr dg = Datagram::create(parent_to_children(m_do_id), m_do_id,
+                                      STATESERVER_OBJECT_DELETE_CHILDREN);
+    route_datagram(dg);
 }
 
 void DistributedObject::wake_children()
@@ -451,32 +473,36 @@ void DistributedObject::handle_datagram(DatagramHandle, DatagramIterator &dgi)
             m_log->warning() << " received reset for wrong AI channel.\n";
             break; // Not my AI!
         }
-        annihilate(sender);
+
+        // Begin the deletion process.
+        begin_delete();
 
         break;
     }
     case STATESERVER_OBJECT_DELETE_RAM: {
         if(m_do_id != dgi.read_doid()) {
-            break;    // Not meant for me!
+            if(m_deletion_process) {
+                // We received this from a child to acknowledge their
+                // deletion. We can delete ourselves now.
+                finish_delete(true);
+            }
+
+            // Nothing else to do here.
+            break;
         }
 
-        // Delete object
-        annihilate(sender);
+        // Begin the deletion process.
+        begin_delete();
 
         break;
     }
     case STATESERVER_OBJECT_DELETE_CHILDREN: {
-        doid_t r_do_id = dgi.read_doid();
-        if(r_do_id == m_do_id) {
-            delete_children(sender);
-        } else if(r_do_id == m_parent_id) {
-            annihilate(sender, false);
-        }
+        begin_delete();
         break;
     }
     case STATESERVER_OBJECT_SET_FIELD: {
         if(m_do_id != dgi.read_doid()) {
-            break;    // Not meant for me!
+            break; // Not meant for me!
         }
         handle_one_update(dgi, sender);
 
@@ -484,7 +510,7 @@ void DistributedObject::handle_datagram(DatagramHandle, DatagramIterator &dgi)
     }
     case STATESERVER_OBJECT_SET_FIELDS: {
         if(m_do_id != dgi.read_doid()) {
-            break;    // Not meant for me!
+            break; // Not meant for me!
         }
         uint16_t field_count = dgi.read_uint16();
         for(int16_t i = 0; i < field_count; ++i) {
