@@ -295,11 +295,10 @@ class OTPClient : public Client, public NetworkHandler
     // iterator provided starts at the 'required fields' data, and may have 'optional fields'.
     // Handler for OBJECT_ENTER_OWNER (an object, enters the Client's ownership).
     virtual void handle_add_ownership(doid_t do_id, doid_t parent_id, zone_t zone_id, uint16_t dc_id,
-                                      DatagramIterator &dgi, bool other)
+                                      DatagramIterator &dgi)
     {
         DatagramPtr resp = Datagram::create();
-        resp->add_uint16(other ? CLIENT_ENTER_OBJECT_REQUIRED_OTHER_OWNER
-                         : CLIENT_ENTER_OBJECT_REQUIRED_OWNER);
+        resp->add_uint16(CLIENT_ENTER_OBJECT_REQUIRED_OTHER_OWNER);
         resp->add_doid(do_id);
         resp->add_location(parent_id, zone_id);
         resp->add_uint16(dc_id);

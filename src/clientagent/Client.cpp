@@ -563,8 +563,7 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
         m_visible_objects.erase(do_id);
     }
     break;
-    case STATESERVER_OBJECT_ENTER_OWNER_WITH_REQUIRED_OTHER:
-    case STATESERVER_OBJECT_ENTER_OWNER_WITH_REQUIRED: {
+    case STATESERVER_OBJECT_ENTER_OWNER_WITH_REQUIRED_OTHER: {
         doid_t do_id = dgi.read_doid();
         doid_t parent = dgi.read_doid();
         zone_t zone = dgi.read_zone();
@@ -580,8 +579,7 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
             m_owned_objects[do_id] = obj;
         }
 
-        bool with_other = (msgtype == STATESERVER_OBJECT_ENTER_OWNER_WITH_REQUIRED_OTHER);
-        handle_add_ownership(do_id, parent, zone, dc_id, dgi, with_other);
+        handle_add_ownership(do_id, parent, zone, dc_id, dgi);
     }
     break;
     case STATESERVER_OBJECT_ENTER_LOCATION_WITH_REQUIRED:

@@ -85,7 +85,23 @@ DistributedObject::~DistributedObject()
     }
 }
 
-void DistributedObject::append_required_data(DatagramPtr dg, bool client_only, bool also_owner)
+void DistributedObject::append_all_data(DatagramPtr dg)
+{
+    dg->add_doid(m_do_id);
+    dg->add_location(m_parent_id, m_zone_id);
+    dg->add_uint16(m_dclass->get_number());
+    size_t field_count = m_dclass->get_num_inherited_fields();
+    for(size_t i = 0; i < field_count; ++i) {
+        DCField *field = m_dclass->get_inherited_field(i);
+        if(field->is_required() && !field->as_molecular_field()) {
+            // We only want to append all required atomic fields.
+            // This should also work for owned objects.
+            dg->add_data(m_required_fields[field]);
+        }
+    }
+}
+
+void DistributedObject::append_required_data(DatagramPtr dg, bool client_only)
 {
     dg->add_doid(m_do_id);
     dg->add_location(m_parent_id, m_zone_id);
@@ -94,20 +110,18 @@ void DistributedObject::append_required_data(DatagramPtr dg, bool client_only, b
     for(size_t i = 0; i < field_count; ++i) {
         DCField *field = m_dclass->get_inherited_field(i);
         if(field->is_required() && !field->as_molecular_field() && (!client_only
-                || field->is_broadcast() || field->is_clrecv()
-                || (also_owner && field->is_ownrecv()))) {
+                || field->is_broadcast() || field->is_clrecv())) {
             dg->add_data(m_required_fields[field]);
         }
     }
 }
 
-void DistributedObject::append_other_data(DatagramPtr dg, bool client_only, bool also_owner)
+void DistributedObject::append_other_data(DatagramPtr dg, bool client_only)
 {
     if(client_only) {
         std::list<DCField*> broadcast_fields;
         for(auto it = m_ram_fields.begin(); it != m_ram_fields.end(); ++it) {
-            if(it->first->is_broadcast() || it->first->is_clrecv()
-               || (also_owner && it->first->is_ownrecv())) {
+            if(it->first->is_broadcast() || it->first->is_clrecv()) {
                 broadcast_fields.push_back(it->first);
             }
         }
@@ -152,13 +166,10 @@ void DistributedObject::send_ai_entry(channel_t ai)
 
 void DistributedObject::send_owner_entry(channel_t owner)
 {
-    DatagramPtr dg = Datagram::create(owner, m_do_id, m_ram_fields.size() ?
-                                      STATESERVER_OBJECT_ENTER_OWNER_WITH_REQUIRED_OTHER :
-                                      STATESERVER_OBJECT_ENTER_OWNER_WITH_REQUIRED);
-    append_required_data(dg, true, true);
-    if(m_ram_fields.size()) {
-        append_other_data(dg, true, true);
-    }
+    // Owner entries are required fields trailed by other fields.
+    DatagramPtr dg = Datagram::create(owner, m_do_id, STATESERVER_OBJECT_ENTER_OWNER_WITH_REQUIRED_OTHER);
+    append_all_data(dg);
+    append_other_data(dg, true);
     route_datagram(dg);
 }
 

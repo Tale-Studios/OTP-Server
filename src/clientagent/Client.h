@@ -214,7 +214,7 @@ class Client : public MDParticipantInterface
     // iterator provided starts at the 'required fields' data, and may have 'optional fields'.
     // Handler for OBJECT_ENTER_OWNER (an object, enters the Client's ownership).
     virtual void handle_add_ownership(doid_t do_id, doid_t parent_id, zone_t zone_id,
-                                      uint16_t dc_id, DatagramIterator &dgi, bool other = false) = 0;
+                                      uint16_t dc_id, DatagramIterator &dgi) = 0;
 
     // handle_set_field should inform the client that the field has been updated.
     virtual void handle_set_field(doid_t do_id, uint16_t field_id,
