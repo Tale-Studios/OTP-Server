@@ -6,11 +6,6 @@
 #include "util/DatagramIterator.h"
 #include "util/Datagram.h"
 
-#include "dclass/dc/DistributedType.h"
-#include "dclass/dc/ArrayType.h"
-#include "dclass/dc/Struct.h"
-#include "dclass/dc/Method.h"
-
 #include <bsoncxx/builder/basic/array.hpp>
 #include <bsoncxx/builder/stream/document.hpp>
 #include <bsoncxx/json.hpp>
@@ -33,7 +28,7 @@ static ConfigVariable<string> db_server("server", "mongodb://127.0.0.1/test",
                                         mongodb_backend_config);
 static ConfigVariable<int> num_workers("workers", 8, mongodb_backend_config);
 
-// These are helper functions to convert between BSON values and packed Bamboo
+// These are helper functions to convert between BSON values and packed DC
 // field values.
 class ConversionException : public exception
 {
@@ -66,7 +61,7 @@ class ConversionException : public exception
     list<string> m_names;
 };
 
-static void bamboo2bson(single_context builder,
+static void dc2bson(single_context builder,
                         const dclass::DistributedType *type, DatagramIterator &dgi)
 {
     using namespace bsoncxx::types;
@@ -166,7 +161,7 @@ static void bamboo2bson(single_context builder,
         auto sub_builder = builder << open_array;
 
         for(size_t i = 0; i < array->get_array_size(); i++) {
-            bamboo2bson(sub_builder, array->get_element_type(), dgi);
+            dc2bson(sub_builder, array->get_element_type(), dgi);
         }
 
         sub_builder << close_array;
@@ -181,7 +176,7 @@ static void bamboo2bson(single_context builder,
         auto sub_builder = builder << open_array;
 
         while(dgi.tell() != starting_size + array_length) {
-            bamboo2bson(sub_builder, array->get_element_type(), dgi);
+            dc2bson(sub_builder, array->get_element_type(), dgi);
             if(dgi.tell() > starting_size + array_length) {
                 throw ConversionException("Discovered corrupt array-length tag!");
             }
@@ -198,7 +193,7 @@ static void bamboo2bson(single_context builder,
 
         for(unsigned int i = 0; i < fields; ++i) {
             DCField *field = s->get_field(i);
-            bamboo2bson(sub_builder << field->get_name(), field->get_type(), dgi);
+            dc2bson(sub_builder << field->get_name(), field->get_type(), dgi);
         }
 
         sub_builder << close_document;
@@ -218,7 +213,7 @@ static void bamboo2bson(single_context builder,
                 n << "_" << i;
                 name = n.str();
             }
-            bamboo2bson(sub_builder << name, parameter->get_type(), dgi);
+            dc2bson(sub_builder << name, parameter->get_type(), dgi);
         }
 
         sub_builder << close_document;
@@ -288,69 +283,57 @@ template<typename T> T handle_bson_number(const bsoncxx::types::value &value)
     return static_cast<T>(i);
 }
 
-static void bson2bamboo(const dclass::DistributedType *type,
-                        const string &field_name,
-                        const bsoncxx::types::value &value,
-                        Datagram &dg)
+static void bson2dc(DCSubatomicType *type,
+                    const string &field_name,
+                    const bsoncxx::types::value &value,
+                    Datagram &dg)
 {
     try {
-        switch(type->get_type()) {
-        case dclass::Type::T_INT8: {
+        switch(type) {
+        case ST_int8: {
             dg.add_int8(handle_bson_number<int8_t>(value));
         }
         break;
-        case dclass::Type::T_INT16: {
+        case ST_int16: {
             dg.add_int16(handle_bson_number<int16_t>(value));
         }
         break;
-        case dclass::Type::T_INT32: {
+        case ST_int32: {
             dg.add_int32(handle_bson_number<int32_t>(value));
         }
         break;
-        case dclass::Type::T_INT64: {
+        case ST_int64: {
             dg.add_int64(handle_bson_number<int64_t>(value));
         }
         break;
-        case dclass::Type::T_UINT8: {
+        case ST_uint8: {
             dg.add_uint8(handle_bson_number<uint8_t>(value));
         }
         break;
-        case dclass::Type::T_UINT16: {
+        case ST_uint16: {
             dg.add_uint16(handle_bson_number<uint16_t>(value));
         }
         break;
-        case dclass::Type::T_UINT32: {
+        case ST_uint32: {
             dg.add_uint32(handle_bson_number<uint32_t>(value));
         }
         break;
-        case dclass::Type::T_UINT64: {
+        case ST_uint64: {
             dg.add_uint64(handle_bson_number<uint64_t>(value));
         }
         break;
-        case dclass::Type::T_CHAR: {
+        case ST_char: {
             if(value.type() != bsoncxx::type::k_utf8 || value.get_utf8().value.size() != 1) {
                 throw ConversionException("Expected single-length string for char field");
             }
             dg.add_uint8(value.get_utf8().value[0]);
         }
         break;
-        case dclass::Type::T_FLOAT32: {
-            dg.add_float32(handle_bson_number<float>(value));
-        }
-        break;
-        case dclass::Type::T_FLOAT64: {
+        case ST_float64: {
             dg.add_float64(handle_bson_number<double>(value));
         }
         break;
-        case dclass::Type::T_STRING: {
-            if(value.type() != bsoncxx::type::k_utf8) {
-                throw ConversionException("Expected string");
-            }
-            string str = value.get_utf8().value.to_string();
-            dg.add_data(str);
-        }
-        break;
-        case dclass::Type::T_VARSTRING: {
+        case ST_string: {
             if(value.type() != bsoncxx::type::k_utf8) {
                 throw ConversionException("Expected string");
             }
@@ -358,7 +341,7 @@ static void bson2bamboo(const dclass::DistributedType *type,
             dg.add_string(str);
         }
         break;
-        case dclass::Type::T_BLOB: {
+        case ST_blob: {
             if(value.type() != bsoncxx::type::k_binary) {
                 throw ConversionException("Expected bindata");
             }
@@ -366,7 +349,7 @@ static void bson2bamboo(const dclass::DistributedType *type,
             dg.add_data(binary.bytes, binary.size);
         }
         break;
-        case dclass::Type::T_VARBLOB: {
+        case ST_blob32: {
             if(value.type() != bsoncxx::type::k_binary) {
                 throw ConversionException("Expected bindata");
             }
@@ -374,81 +357,120 @@ static void bson2bamboo(const dclass::DistributedType *type,
             dg.add_blob(binary.bytes, binary.size);
         }
         break;
-        case dclass::Type::T_ARRAY: {
+        case ST_int8array: {
             if(value.type() != bsoncxx::type::k_array) {
                 throw ConversionException("Expected array");
             }
-            const dclass::DistributedType *element_type = type->as_array()->get_element_type();
+
             auto array = value.get_array().value;
 
             size_t index = 0;
             for(const auto& it : array) {
                 stringstream array_index;
                 array_index << "[" << index++ << "]";
-                bson2bamboo(element_type, array_index.str(), it.get_value(), dg);
+                bson2dc(ST_int8, array_index.str(), it.get_value(), dg);
             }
         }
         break;
-        case dclass::Type::T_VARARRAY: {
+        case ST_int16array: {
             if(value.type() != bsoncxx::type::k_array) {
                 throw ConversionException("Expected array");
             }
-            const dclass::DistributedType *element_type = type->as_array()->get_element_type();
-            auto array = value.get_array().value;
 
-            DatagramPtr newdg = Datagram::create();
+            auto array = value.get_array().value;
 
             size_t index = 0;
             for(const auto& it : array) {
                 stringstream array_index;
                 array_index << "[" << index++ << "]";
-                bson2bamboo(element_type, array_index.str(), it.get_value(), *newdg);
+                bson2dc(ST_int16, array_index.str(), it.get_value(), dg);
+            }
+        }
+        break;
+        case ST_int32array: {
+            if(value.type() != bsoncxx::type::k_array) {
+                throw ConversionException("Expected array");
             }
 
-            dg.add_blob(newdg->get_data(), newdg->size());
-        }
-        break;
-        case dclass::Type::T_STRUCT: {
-            if(value.type() != bsoncxx::type::k_document) {
-                throw ConversionException("Expected sub-document");
-            }
-            auto document = value.get_document().value;
-            const dclass::Struct *s = type->as_struct();
-            size_t fields = s->get_num_fields();
-            for(unsigned int i = 0; i < fields; ++i) {
-                DCField *field = s->get_field(i);
-                auto element = document[field->get_name()];
-                if(!element) {
-                    throw ConversionException("Struct field is absent", field->get_name());
-                }
-                bson2bamboo(field->get_type(), field->get_name(), element.get_value(), dg);
+            auto array = value.get_array().value;
+
+            size_t index = 0;
+            for(const auto& it : array) {
+                stringstream array_index;
+                array_index << "[" << index++ << "]";
+                bson2dc(ST_int32, array_index.str(), it.get_value(), dg);
             }
         }
         break;
-        case dclass::Type::T_METHOD: {
-            if(value.type() != bsoncxx::type::k_document) {
-                throw ConversionException("Expected sub-document");
+        case ST_uint8array: {
+            if(value.type() != bsoncxx::type::k_array) {
+                throw ConversionException("Expected array");
             }
-            auto document = value.get_document().value;
-            const dclass::Method *m = type->as_method();
-            size_t parameters = m->get_num_parameters();
-            for(unsigned int i = 0; i < parameters; ++i) {
-                const dclass::Parameter *parameter = m->get_parameter(i);
-                string name = parameter->get_name();
-                if(name.empty() || !document[name]) {
-                    stringstream n;
-                    n << "_" << i;
-                    name = n.str();
-                }
-                auto element = document[name];
-                if(!element) {
-                    throw ConversionException("Parameter is absent", parameter->get_name());
-                }
-                bson2bamboo(parameter->get_type(), name, element.get_value(), dg);
+
+            auto array = value.get_array().value;
+
+            size_t index = 0;
+            for(const auto& it : array) {
+                stringstream array_index;
+                array_index << "[" << index++ << "]";
+                bson2dc(ST_uint8, array_index.str(), it.get_value(), dg);
             }
         }
         break;
-        case dclass::Type::T_INVALID:
+        case ST_uint16array: {
+            if(value.type() != bsoncxx::type::k_array) {
+                throw ConversionException("Expected array");
+            }
+
+            auto array = value.get_array().value;
+
+            size_t index = 0;
+            for(const auto& it : array) {
+                stringstream array_index;
+                array_index << "[" << index++ << "]";
+                bson2dc(ST_uint16, array_index.str(), it.get_value(), dg);
+            }
+        }
+        break;
+        case ST_uint32array: {
+            if(value.type() != bsoncxx::type::k_array) {
+                throw ConversionException("Expected array");
+            }
+
+            auto array = value.get_array().value;
+
+            size_t index = 0;
+            for(const auto& it : array) {
+                stringstream array_index;
+                array_index << "[" << index++ << "]";
+                bson2dc(ST_uint32, array_index.str(), it.get_value(), dg);
+            }
+        }
+        break;
+        case ST_uint32uint8array: {
+            if(value.type() != bsoncxx::type::k_array) {
+                throw ConversionException("Expected array");
+            }
+
+            auto array = value.get_array().value;
+
+            size_t index = 0;
+            bool alternate = false;
+            for(const auto& it : array) {
+                stringstream array_index;
+                array_index << "[" << index++ << "]";
+                if(!next_element) {
+                    bson2dc(ST_uint32, array_index.str(), it.get_value(), dg);
+                    alternate = true;
+                }
+                else {
+                    bson2dc(ST_uint8, array_index.str(), it.get_value(), dg);
+                    alternate = false;
+                }
+            }
+        }
+        break;
+        case ST_invalid:
         default:
             assert(false);
             break;
@@ -598,7 +620,8 @@ class MongoDatabase : public DatabaseBackend
                 DatagramPtr dg = Datagram::create();
                 dg->add_data(it.second);
                 DatagramIterator dgi(dg);
-                bamboo2bson(builder << it.first->get_name(), it.first->get_type(), dgi);
+
+                dc2bson(builder << it.first->get_name(), it.first->get_type(), dgi);
             }
         } catch(ConversionException &e) {
             m_log->error() << "While formatting "
@@ -706,7 +729,7 @@ class MongoDatabase : public DatabaseBackend
                 DatagramPtr dg = Datagram::create();
                 dg->add_data(it.second);
                 DatagramIterator dgi(dg);
-                bamboo2bson(sets_builder << fieldname.str(), it.first->get_type(), dgi);
+                dc2bson(sets_builder << fieldname.str(), it.first->get_type(), dgi);
             }
         }
         auto sets = sets_builder << finalize;
@@ -729,7 +752,7 @@ class MongoDatabase : public DatabaseBackend
                 DatagramPtr dg = Datagram::create();
                 dg->add_data(it.second);
                 DatagramIterator dgi(dg);
-                bamboo2bson(query << fieldname.str(), it.first->get_type(), dgi);
+                dc2bson(query << fieldname.str(), it.first->get_type(), dgi);
             }
         }
         auto query_obj = query << finalize;
@@ -865,8 +888,23 @@ class MongoDatabase : public DatabaseBackend
                     continue;
                 }
 
+                DCAtomicField *atomic_field = field->as_atomic_field();
+                size_t parameters = atomic_field->get_num_elements();
+
+                // Create the datagram that bson2dc will store
+                // the field data in.
                 DatagramPtr dg = Datagram::create();
-                bson2bamboo(field->get_type(), field->get_name(), it.get_value(), *dg);
+
+                for(unsigned int i = 0; i < parameters; ++i) {
+                    // Grab the type through the simple parameter.
+                    DCParameter *parameter = atomic_field->get_element(i);
+                    DCSimpleParameter *simple_parameter = parameter->as_simple_parameter();
+                    DCSubatomicType *type = simple_parameter->get_type();
+
+                    // Run through the parameter in bson2dc.
+                    bson2dc(type, field->get_name(), it.get_value(), *dg);
+                }
+
                 snap->m_fields[field].resize(dg->size());
                 memcpy(snap->m_fields[field].data(), dg->get_data(), dg->size());
             }
