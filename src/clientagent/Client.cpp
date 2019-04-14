@@ -237,8 +237,7 @@ void Client::add_interest(Interest &i, uint32_t context, channel_t caller)
         // We aren't requesting any new zones with this operation, so don't
         // bother firing off a State Server request. Instead, let the caller
         // know we're already done:
-
-        if (caller == m_channel)
+        if(caller == m_channel)
         {
             handle_interest_done(i.id, context);
         }
@@ -305,14 +304,6 @@ void Client::close_zones(doid_t parent, const unordered_set<zone_t> &killed_zone
         }
 
         if(killed_zones.find(visible_object.zone) != killed_zones.end()) {
-            // Unless the object is owned (in which case it needs
-            // to stay in visibility regardless), we can go ahead
-            // and start removing our visibility of the object.
-            if (m_owned_objects.find(visible_object.id) != m_owned_objects.end())
-            {
-                continue;
-            }
-
             handle_remove_object(visible_object.id);
             m_seen_objects.erase(visible_object.id);
             m_historical_objects.insert(visible_object.id);
@@ -488,6 +479,38 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
         m_objects_relocatable.insert(do_id);
     }
     break;
+    case CLIENTAGENT_ADD_SESSION_OBJECT: {
+        doid_t do_id = dgi.read_doid();
+        if(m_session_objects.find(do_id) != m_session_objects.end()) {
+            m_log->warning() << "Received add session object for existing session object "
+                             << do_id << ".\n";
+            return;
+        }
+        if(m_owned_objects.find(do_id) == m_owned_objects.end()) {
+            m_log->warning() << "Received add session object for non-owned object "
+                             << do_id << ".\n";
+            return;
+        }
+
+        m_log->debug() << "Added session object with id " << do_id << ".\n";
+
+        m_session_objects.insert(do_id);
+    }
+    break;
+    case CLIENTAGENT_REMOVE_SESSION_OBJECT: {
+        doid_t do_id = dgi.read_doid();
+
+        if(m_session_objects.find(do_id) == m_session_objects.end()) {
+            m_log->warning() << "Received remove session object for non-session object "
+                             << do_id << ".\n";
+            return;
+        }
+
+        m_log->debug() << "Removed session object with id " << do_id << ".\n";
+
+        m_session_objects.erase(do_id);
+    }
+    break;
     case CLIENTAGENT_GET_TLVS: {
         DatagramPtr resp = Datagram::create(sender, m_channel, CLIENTAGENT_GET_TLVS_RESP);
         resp->add_uint32(dgi.read_uint32()); // Context
@@ -542,11 +565,11 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
             return;
         }
 
-        if(m_owned_objects.find(do_id) != m_owned_objects.end()) {
-            // We have to erase the object from our owned_objects here, because
+        if(m_session_objects.find(do_id) != m_session_objects.end()) {
+            // We have to erase the object from our session_objects here, because
             // the object has already been deleted and we don't want it to be deleted
             // again in the client's destructor.
-            m_owned_objects.erase(do_id);
+            m_session_objects.erase(do_id);
         }
 
         if(m_seen_objects.find(do_id) != m_seen_objects.end()) {
@@ -645,29 +668,41 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
             }
         }
 
+        bool session = m_session_objects.find(do_id) != m_session_objects.end();
         bool visible = m_visible_objects.find(do_id) != m_visible_objects.end();
         bool owned = m_owned_objects.find(do_id) != m_owned_objects.end();
 
-        if (!visible && !owned) {
+        if(!visible && !owned) {
             // We don't actually *see* this object, we're receiving this
             // message as a fluke.
             return;
         }
 
-        if (visible) {
+        if(visible) {
             m_visible_objects[do_id].parent = n_parent;
             m_visible_objects[do_id].zone = n_zone;
         }
 
-        if (owned) {
-            // This is an owned object. Therefore:
-            // - It should be 'visible' to us regardless of interest
-            // - We should keep track of its location
-            m_owned_objects[do_id].parent = n_parent;
-            m_owned_objects[do_id].zone = n_zone;
+        if(session) {
+            if(owned) {
+                // This is an owned session object. Therefore:
+                // - It should be 'visible' to us regardless of interest
+                // - We should keep track of its location
+                m_owned_objects[do_id].parent = n_parent;
+                m_owned_objects[do_id].zone = n_zone;
 
-            // Fire off CLIENT_OBJECT_LOCATION.
-            handle_change_location(do_id, n_parent, n_zone);
+                // Fire off CLIENT_OBJECT_LOCATION.
+                handle_change_location(do_id, n_parent, n_zone);
+            }
+            else {
+                // This is a session object, but it isn't owned...
+                // Session objects must always be owned.
+                stringstream ss;
+                ss << "The session object with id " << do_id
+                   << " is no longer owned.";
+                send_disconnect(CLIENT_DISCONNECT_SESSION_OBJECT_DELETED, ss.str());
+            }
+
             return;
         }
 
@@ -680,7 +715,6 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
             m_historical_objects.insert(do_id);
             m_visible_objects.erase(do_id);
         }
-
         else {
             handle_change_location(do_id, n_parent, n_zone);
         }
@@ -700,6 +734,16 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
         if(m_owned_objects.find(do_id) == m_owned_objects.end()) {
             m_log->error() << "Received ChangingOwner for unowned object with id "
                            << do_id << ".\n";
+            return;
+        }
+
+        // If it's a session object, disconnect the client.
+        // Session objects must stick with their original owner.
+        if(m_session_objects.find(do_id) != m_session_objects.end()) {
+            stringstream ss;
+            ss << "The session object with id " << do_id
+               << " has attempted to change ownership.";
+            send_disconnect(CLIENT_DISCONNECT_SESSION_OBJECT_DELETED, ss.str());
             return;
         }
 
@@ -725,7 +769,7 @@ void Client::handle_object_entrance(DatagramIterator &dgi, bool other)
         return;
     }
 
-    if(m_owned_objects.find(do_id) != m_owned_objects.end()) {
+    if(m_session_objects.find(do_id) != m_session_objects.end()) {
         return;
     }
 
@@ -748,7 +792,7 @@ void Client::handle_object_entrance(DatagramIterator &dgi, bool other)
 // interest operation's caller, if one has been set.
 void Client::notify_interest_done(uint16_t interest_id, channel_t caller)
 {
-    if (caller == 0) {
+    if(caller == 0) {
         return;
     }
 
@@ -779,7 +823,7 @@ InterestOperation::InterestOperation(
 
 InterestOperation::~InterestOperation()
 {
-    if (!m_finished)
+    if(!m_finished)
     {
         m_client->m_log->warning() << "Interest operation failed; deleting.\n";
         delete this;
@@ -816,7 +860,7 @@ void InterestOperation::finish(bool is_timeout)
     }
 
     // Distribute the interest done message.
-    if (m_caller == m_client->m_channel)
+    if(m_caller == m_client->m_channel)
     {
         m_client->handle_interest_done(m_interest_id, m_client_context);
     }
@@ -853,7 +897,7 @@ void InterestOperation::add_object(doid_t do_id)
     m_generated_objects++;
 
     // If all of our objects are now generated, finish.
-    if (is_ready())
+    if(is_ready())
     {
         finish(false);
     }
