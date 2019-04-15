@@ -6,6 +6,11 @@
 #include "util/DatagramIterator.h"
 #include "util/Datagram.h"
 
+#include "dclass/dcAtomicField.h"
+#include "dclass/dcSubatomicType.h"
+#include "dclass/dcSimpleParameter.h"
+#include "dclass/dcArrayParameter.h"
+
 #include <bsoncxx/builder/basic/array.hpp>
 #include <bsoncxx/builder/stream/document.hpp>
 #include <bsoncxx/json.hpp>
@@ -62,69 +67,61 @@ class ConversionException : public exception
 };
 
 static void dc2bson(single_context builder,
-                        const dclass::DistributedType *type, DatagramIterator &dgi)
+                        DCSimpleParameter *type, DatagramIterator &dgi)
 {
     using namespace bsoncxx::types;
     switch(type->get_type()) {
-    case dclass::Type::T_INT8: {
+    case ST_int8: {
         builder << b_int32 {dgi.read_int8()};
     }
     break;
-    case dclass::Type::T_INT16: {
+    case ST_int16: {
         builder << b_int32 {dgi.read_int16()};
     }
     break;
-    case dclass::Type::T_INT32: {
+    case ST_int32: {
         builder << b_int32 {dgi.read_int32()};
     }
     break;
-    case dclass::Type::T_INT64: {
+    case ST_int64: {
         builder << b_int64 {dgi.read_int64()};
     }
     break;
-    case dclass::Type::T_UINT8: {
+    case ST_uint8: {
         builder << b_int32 {dgi.read_uint8()};
     }
     break;
-    case dclass::Type::T_UINT16: {
+    case ST_uint16: {
         builder << b_int32 {dgi.read_uint16()};
     }
     break;
-    case dclass::Type::T_UINT32: {
+    case ST_uint32: {
         builder << b_int64 {dgi.read_uint32()};
     }
     break;
-    case dclass::Type::T_UINT64: {
+    case ST_uint64: {
         // Note: Values over 1/2 the maximum will become negative.
         builder << b_int64 {static_cast<int64_t>(dgi.read_uint64())};
     }
     break;
-    case dclass::Type::T_CHAR: {
+    case ST_char: {
         unsigned char c = dgi.read_uint8();
         string str(1, c);
         builder << b_utf8 {str};
     }
     break;
-    case dclass::Type::T_FLOAT32: {
-        builder << b_double {dgi.read_float32()};
-    }
-    break;
-    case dclass::Type::T_FLOAT64: {
+    case ST_float64: {
         builder << b_double {dgi.read_float64()};
     }
     break;
-    case dclass::Type::T_STRING: {
-        vector<uint8_t> vec = dgi.read_data(type->get_size());
+    case ST_string: {
+        vector<uint8_t> vec = dgi.read_data(type->get_fixed_byte_size());
         string str((const char *)vec.data(), vec.size());
         builder << b_utf8 {str};
     }
     break;
-    case dclass::Type::T_VARSTRING: {
-        builder << b_utf8 {dgi.read_string()};
-    }
-    break;
-    case dclass::Type::T_BLOB: {
-        vector<uint8_t> blob = dgi.read_data(type->get_size());
+    case ST_blob: {
+        vector<uint8_t> blob = dgi.read_data(type->get_fixed_byte_size());
         if(blob.data() == nullptr) {
             // libbson gets upset if passed a nullptr here, but it's valid for
             // vector.data() to return nullptr if it's empty, so we make
@@ -139,7 +136,7 @@ static void dc2bson(single_context builder,
         }
     }
     break;
-    case dclass::Type::T_VARBLOB: {
+    case ST_blob32: {
         vector<uint8_t> blob = dgi.read_blob();
         if(blob.data() == nullptr) {
             // libbson gets upset if passed a nullptr here, but it's valid for
@@ -155,71 +152,24 @@ static void dc2bson(single_context builder,
         }
     }
     break;
-    case dclass::Type::T_ARRAY: {
-        const dclass::ArrayType *array = type->as_array();
+    case ST_int8array: 
+    case ST_int16array: 
+    case ST_int32array:
+    case ST_uint8array:
+    case ST_uint16array:
+    case ST_uint32uint8array: {
+        const DCArrayParameter *array = type->as_array_parameter();
 
         auto sub_builder = builder << open_array;
 
         for(size_t i = 0; i < array->get_array_size(); i++) {
-            dc2bson(sub_builder, array->get_element_type(), dgi);
+            dc2bson(sub_builder, array->get_element_type()->as_simple_parameter(), dgi);
         }
 
         sub_builder << close_array;
     }
     break;
-    case dclass::Type::T_VARARRAY: {
-        const dclass::ArrayType *array = type->as_array();
-
-        sizetag_t array_length = dgi.read_size();
-        sizetag_t starting_size = dgi.tell();
-
-        auto sub_builder = builder << open_array;
-
-        while(dgi.tell() != starting_size + array_length) {
-            dc2bson(sub_builder, array->get_element_type(), dgi);
-            if(dgi.tell() > starting_size + array_length) {
-                throw ConversionException("Discovered corrupt array-length tag!");
-            }
-        }
-
-        sub_builder << close_array;
-    }
-    break;
-    case dclass::Type::T_STRUCT: {
-        const dclass::Struct *s = type->as_struct();
-        size_t fields = s->get_num_fields();
-
-        auto sub_builder = builder << open_document;
-
-        for(unsigned int i = 0; i < fields; ++i) {
-            DCField *field = s->get_field(i);
-            dc2bson(sub_builder << field->get_name(), field->get_type(), dgi);
-        }
-
-        sub_builder << close_document;
-    }
-    break;
-    case dclass::Type::T_METHOD: {
-        const dclass::Method *m = type->as_method();
-        size_t parameters = m->get_num_parameters();
-
-        auto sub_builder = builder << open_document;
-
-        for(unsigned int i = 0; i < parameters; ++i) {
-            const dclass::Parameter *parameter = m->get_parameter(i);
-            string name = parameter->get_name();
-            if(name.empty()) {
-                stringstream n;
-                n << "_" << i;
-                name = n.str();
-            }
-            dc2bson(sub_builder << name, parameter->get_type(), dgi);
-        }
-
-        sub_builder << close_document;
-    }
-    break;
-    case dclass::Type::T_INVALID:
+    case ST_invalid:
     default:
         assert(false);
         break;
@@ -283,13 +233,13 @@ template<typename T> T handle_bson_number(const bsoncxx::types::value &value)
     return static_cast<T>(i);
 }
 
-static void bson2dc(DCSubatomicType *type,
+static void bson2dc(DCSimpleParameter *type,
                     const string &field_name,
                     const bsoncxx::types::value &value,
                     Datagram &dg)
 {
     try {
-        switch(type) {
+        switch(type->get_type()) {
         case ST_int8: {
             dg.add_int8(handle_bson_number<int8_t>(value));
         }
@@ -357,93 +307,23 @@ static void bson2dc(DCSubatomicType *type,
             dg.add_blob(binary.bytes, binary.size);
         }
         break;
-        case ST_int8array: {
-            if(value.type() != bsoncxx::type::k_array) {
-                throw ConversionException("Expected array");
-            }
-
-            auto array = value.get_array().value;
-
-            size_t index = 0;
-            for(const auto& it : array) {
-                stringstream array_index;
-                array_index << "[" << index++ << "]";
-                bson2dc(ST_int8, array_index.str(), it.get_value(), dg);
-            }
-        }
-        break;
-        case ST_int16array: {
-            if(value.type() != bsoncxx::type::k_array) {
-                throw ConversionException("Expected array");
-            }
-
-            auto array = value.get_array().value;
-
-            size_t index = 0;
-            for(const auto& it : array) {
-                stringstream array_index;
-                array_index << "[" << index++ << "]";
-                bson2dc(ST_int16, array_index.str(), it.get_value(), dg);
-            }
-        }
-        break;
-        case ST_int32array: {
-            if(value.type() != bsoncxx::type::k_array) {
-                throw ConversionException("Expected array");
-            }
-
-            auto array = value.get_array().value;
-
-            size_t index = 0;
-            for(const auto& it : array) {
-                stringstream array_index;
-                array_index << "[" << index++ << "]";
-                bson2dc(ST_int32, array_index.str(), it.get_value(), dg);
-            }
-        }
-        break;
-        case ST_uint8array: {
-            if(value.type() != bsoncxx::type::k_array) {
-                throw ConversionException("Expected array");
-            }
-
-            auto array = value.get_array().value;
-
-            size_t index = 0;
-            for(const auto& it : array) {
-                stringstream array_index;
-                array_index << "[" << index++ << "]";
-                bson2dc(ST_uint8, array_index.str(), it.get_value(), dg);
-            }
-        }
-        break;
-        case ST_uint16array: {
-            if(value.type() != bsoncxx::type::k_array) {
-                throw ConversionException("Expected array");
-            }
-
-            auto array = value.get_array().value;
-
-            size_t index = 0;
-            for(const auto& it : array) {
-                stringstream array_index;
-                array_index << "[" << index++ << "]";
-                bson2dc(ST_uint16, array_index.str(), it.get_value(), dg);
-            }
-        }
-        break;
+        case ST_int8array:
+        case ST_int16array:
+        case ST_int32array:
+        case ST_uint8array: 
+        case ST_uint16array: 
         case ST_uint32array: {
             if(value.type() != bsoncxx::type::k_array) {
                 throw ConversionException("Expected array");
             }
-
+            DCSimpleParameter *element_type = type->as_array_parameter()->get_element_type()->as_simple_parameter();         
             auto array = value.get_array().value;
 
             size_t index = 0;
             for(const auto& it : array) {
                 stringstream array_index;
                 array_index << "[" << index++ << "]";
-                bson2dc(ST_uint32, array_index.str(), it.get_value(), dg);
+                bson2dc(element_type, array_index.str(), it.get_value(), dg);
             }
         }
         break;
@@ -451,7 +331,7 @@ static void bson2dc(DCSubatomicType *type,
             if(value.type() != bsoncxx::type::k_array) {
                 throw ConversionException("Expected array");
             }
-
+            DCSimpleParameter *element_type = type->as_array_parameter()->get_element_type()->as_simple_parameter();
             auto array = value.get_array().value;
 
             size_t index = 0;
@@ -459,12 +339,12 @@ static void bson2dc(DCSubatomicType *type,
             for(const auto& it : array) {
                 stringstream array_index;
                 array_index << "[" << index++ << "]";
-                if(!next_element) {
-                    bson2dc(ST_uint32, array_index.str(), it.get_value(), dg);
+                if(!alternate) {
+                    bson2dc(element_type, array_index.str(), it.get_value(), dg);
                     alternate = true;
                 }
                 else {
-                    bson2dc(ST_uint8, array_index.str(), it.get_value(), dg);
+                    bson2dc(element_type, array_index.str(), it.get_value(), dg);
                     alternate = false;
                 }
             }
@@ -621,7 +501,7 @@ class MongoDatabase : public DatabaseBackend
                 dg->add_data(it.second);
                 DatagramIterator dgi(dg);
 
-                dc2bson(builder << it.first->get_name(), it.first->get_type(), dgi);
+                dc2bson(builder << it.first->get_name(), it.first->as_parameter()->as_simple_parameter(), dgi);
             }
         } catch(ConversionException &e) {
             m_log->error() << "While formatting "
@@ -729,7 +609,7 @@ class MongoDatabase : public DatabaseBackend
                 DatagramPtr dg = Datagram::create();
                 dg->add_data(it.second);
                 DatagramIterator dgi(dg);
-                dc2bson(sets_builder << fieldname.str(), it.first->get_type(), dgi);
+                dc2bson(sets_builder << fieldname.str(), it.first->as_parameter()->as_simple_parameter(), dgi);
             }
         }
         auto sets = sets_builder << finalize;
@@ -752,7 +632,7 @@ class MongoDatabase : public DatabaseBackend
                 DatagramPtr dg = Datagram::create();
                 dg->add_data(it.second);
                 DatagramIterator dgi(dg);
-                dc2bson(query << fieldname.str(), it.first->get_type(), dgi);
+                dc2bson(query << fieldname.str(), it.first->as_parameter()->as_simple_parameter(), dgi);
             }
         }
         auto query_obj = query << finalize;
@@ -899,10 +779,9 @@ class MongoDatabase : public DatabaseBackend
                     // Grab the type through the simple parameter.
                     DCParameter *parameter = atomic_field->get_element(i);
                     DCSimpleParameter *simple_parameter = parameter->as_simple_parameter();
-                    DCSubatomicType *type = simple_parameter->get_type();
 
                     // Run through the parameter in bson2dc.
-                    bson2dc(type, field->get_name(), it.get_value(), *dg);
+                    bson2dc(simple_parameter, field->get_name(), it.get_value(), *dg);
                 }
 
                 snap->m_fields[field].resize(dg->size());
