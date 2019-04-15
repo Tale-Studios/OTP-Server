@@ -152,8 +152,8 @@ static void dc2bson(single_context builder,
         }
     }
     break;
-    case ST_int8array: 
-    case ST_int16array: 
+    case ST_int8array:
+    case ST_int16array:
     case ST_int32array:
     case ST_uint8array:
     case ST_uint16array:
@@ -310,13 +310,13 @@ static void bson2dc(DCSimpleParameter *type,
         case ST_int8array:
         case ST_int16array:
         case ST_int32array:
-        case ST_uint8array: 
-        case ST_uint16array: 
+        case ST_uint8array:
+        case ST_uint16array:
         case ST_uint32array: {
             if(value.type() != bsoncxx::type::k_array) {
                 throw ConversionException("Expected array");
             }
-            DCSimpleParameter *element_type = type->as_array_parameter()->get_element_type()->as_simple_parameter();         
+            DCSimpleParameter *element_type = type->as_array_parameter()->get_element_type()->as_simple_parameter();
             auto array = value.get_array().value;
 
             size_t index = 0;
@@ -335,18 +335,10 @@ static void bson2dc(DCSimpleParameter *type,
             auto array = value.get_array().value;
 
             size_t index = 0;
-            bool alternate = false;
             for(const auto& it : array) {
                 stringstream array_index;
                 array_index << "[" << index++ << "]";
-                if(!alternate) {
-                    bson2dc(element_type, array_index.str(), it.get_value(), dg);
-                    alternate = true;
-                }
-                else {
-                    bson2dc(element_type, array_index.str(), it.get_value(), dg);
-                    alternate = false;
-                }
+                bson2dc(element_type, array_index.str(), it.get_value(), dg);
             }
         }
         break;
@@ -501,7 +493,16 @@ class MongoDatabase : public DatabaseBackend
                 dg->add_data(it.second);
                 DatagramIterator dgi(dg);
 
-                dc2bson(builder << it.first->get_name(), it.first->as_parameter()->as_simple_parameter(), dgi);
+                DCAtomicField *atomic_field = it.first->as_atomic_field();
+                size_t parameters = atomic_field->get_num_elements();
+
+                for(unsigned int i = 0; i < parameters; ++i) {
+                    // Grab each simple parameter and run through it in dc2bson.
+                    DCParameter *parameter = atomic_field->get_element(i);
+                    DCSimpleParameter *simple_parameter = parameter->as_simple_parameter();
+
+                    dc2bson(builder << it.first->get_name(), simple_parameter, dgi);
+                }
             }
         } catch(ConversionException &e) {
             m_log->error() << "While formatting "
@@ -609,7 +610,17 @@ class MongoDatabase : public DatabaseBackend
                 DatagramPtr dg = Datagram::create();
                 dg->add_data(it.second);
                 DatagramIterator dgi(dg);
-                dc2bson(sets_builder << fieldname.str(), it.first->as_parameter()->as_simple_parameter(), dgi);
+
+                DCAtomicField *atomic_field = it.first->as_atomic_field();
+                size_t parameters = atomic_field->get_num_elements();
+
+                for(unsigned int i = 0; i < parameters; ++i) {
+                    // Grab each simple parameter and run through it in dc2bson.
+                    DCParameter *parameter = atomic_field->get_element(i);
+                    DCSimpleParameter *simple_parameter = parameter->as_simple_parameter();
+
+                    dc2bson(sets_builder << fieldname.str(), simple_parameter, dgi);
+                }
             }
         }
         auto sets = sets_builder << finalize;
@@ -632,7 +643,17 @@ class MongoDatabase : public DatabaseBackend
                 DatagramPtr dg = Datagram::create();
                 dg->add_data(it.second);
                 DatagramIterator dgi(dg);
-                dc2bson(query << fieldname.str(), it.first->as_parameter()->as_simple_parameter(), dgi);
+
+                DCAtomicField *atomic_field = it.first->as_atomic_field();
+                size_t parameters = atomic_field->get_num_elements();
+
+                for(unsigned int i = 0; i < parameters; ++i) {
+                    // Grab each simple parameter and run through it in dc2bson.
+                    DCParameter *parameter = atomic_field->get_element(i);
+                    DCSimpleParameter *simple_parameter = parameter->as_simple_parameter();
+
+                    dc2bson(query << fieldname.str(), simple_parameter, dgi);
+                }
             }
         }
         auto query_obj = query << finalize;
