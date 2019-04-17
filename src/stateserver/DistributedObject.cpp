@@ -20,7 +20,7 @@ DistributedObject::DistributedObject(StateServer *stateserver, doid_t do_id, doi
     m_log = new LogCategory("object", name.str());
     set_con_name(name.str());
 
-    for(unsigned int i = 0; i < m_dclass->get_num_inherited_fields(); ++i) {
+    for(int i = 0; i < m_dclass->get_num_inherited_fields(); ++i) {
         DCField *field = m_dclass->get_inherited_field(i);
         if(field->is_required() && !field->as_molecular_field()) {
             dgi.unpack_field(field, m_required_fields[field]);

@@ -211,7 +211,7 @@ bool DBOperationCreate::initialize(channel_t sender, uint16_t, DatagramIterator 
     }
 
     // Set all non-present fields to defaults (if they exist)
-    for(unsigned int i = 0; i < m_dclass->get_num_inherited_fields(); ++i) {
+    for(int i = 0; i < m_dclass->get_num_inherited_fields(); ++i) {
         DCField *field = m_dclass->get_inherited_field(i);
         if(field->has_default_value() && field->is_db()
            && m_set_fields.find(field) == m_set_fields.end()) {

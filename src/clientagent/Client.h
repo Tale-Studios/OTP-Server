@@ -66,8 +66,8 @@ class InterestOperation
     uint32_t m_client_context;
     uint32_t m_request_context;
     doid_t m_parent;
-    channel_t m_caller;
     std::unordered_set<zone_t> m_zones;
+    channel_t m_caller;
 
     unsigned long m_timeout_interval;
     Timeout* m_timeout = nullptr;

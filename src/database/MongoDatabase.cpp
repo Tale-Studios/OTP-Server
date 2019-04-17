@@ -162,7 +162,7 @@ static void dc2bson(single_context builder,
 
         auto sub_builder = builder << open_array;
 
-        for(size_t i = 0; i < array->get_array_size(); i++) {
+        for(int i = 0; i < array->get_array_size(); i++) {
             dc2bson(sub_builder, array->get_element_type()->as_simple_parameter(), dgi);
         }
 
