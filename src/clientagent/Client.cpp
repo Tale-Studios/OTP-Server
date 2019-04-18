@@ -613,7 +613,12 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
 
         bool with_other = (msgtype == STATESERVER_OBJECT_ENTER_LOCATION_WITH_REQUIRED_OTHER);
 
+        // XXX HACK
+        // something is wrong with gcc version 6.5.0 20181026 (Ubuntu 6.5.0-2ubuntu1~16.04)
+        size_t i = 0;
+        size_t size = m_pending_interests.size();
         for(auto& it : m_pending_interests) {
+            if (i++ > size) break;
             InterestOperation *interest_operation = it.second;
             if(interest_operation->m_parent == parent &&
                interest_operation->m_zones.find(zone) != interest_operation->m_zones.end()) {

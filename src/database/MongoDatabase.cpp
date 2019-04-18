@@ -10,6 +10,7 @@
 #include "dclass/dcSubatomicType.h"
 #include "dclass/dcSimpleParameter.h"
 #include "dclass/dcArrayParameter.h"
+#include "dclass/dcClassParameter.h"
 
 #include <bsoncxx/builder/basic/array.hpp>
 #include <bsoncxx/builder/stream/document.hpp>
@@ -67,112 +68,189 @@ class ConversionException : public exception
 };
 
 static void dc2bson(single_context builder,
-                        DCSimpleParameter *type, DatagramIterator &dgi)
+                    const DCField *field,
+                    DatagramIterator &dgi)
 {
     using namespace bsoncxx::types;
-    switch(type->get_type()) {
-    case ST_int8: {
-        builder << b_int32 {dgi.read_int8()};
+
+    const DCMolecularField *param_molecular_field = field->as_molecular_field();
+    if (param_molecular_field != nullptr) {
+        // XXX TODO
+        assert(false);
+        return;
     }
-    break;
-    case ST_int16: {
-        builder << b_int32 {dgi.read_int16()};
-    }
-    break;
-    case ST_int32: {
-        builder << b_int32 {dgi.read_int32()};
-    }
-    break;
-    case ST_int64: {
-        builder << b_int64 {dgi.read_int64()};
-    }
-    break;
-    case ST_uint8: {
-        builder << b_int32 {dgi.read_uint8()};
-    }
-    break;
-    case ST_uint16: {
-        builder << b_int32 {dgi.read_uint16()};
-    }
-    break;
-    case ST_uint32: {
-        builder << b_int64 {dgi.read_uint32()};
-    }
-    break;
-    case ST_uint64: {
-        // Note: Values over 1/2 the maximum will become negative.
-        builder << b_int64 {static_cast<int64_t>(dgi.read_uint64())};
-    }
-    break;
-    case ST_char: {
-        unsigned char c = dgi.read_uint8();
-        string str(1, c);
-        builder << b_utf8 {str};
-    }
-    break;
-    case ST_float64: {
-        builder << b_double {dgi.read_float64()};
-    }
-    break;
-    case ST_string: {
-        vector<uint8_t> vec = dgi.read_data(type->get_fixed_byte_size());
-        string str((const char *)vec.data(), vec.size());
-        builder << b_utf8 {str};
-    }
-    break;
-    case ST_blob: {
-        vector<uint8_t> blob = dgi.read_data(type->get_fixed_byte_size());
-        if(blob.data() == nullptr) {
-            // libbson gets upset if passed a nullptr here, but it's valid for
-            // vector.data() to return nullptr if it's empty, so we make
-            // something up instead:
-            builder << b_binary { bsoncxx::binary_sub_type::k_binary, 0, (const uint8_t*)1 };
-        } else {
-            builder << b_binary {
-                bsoncxx::binary_sub_type::k_binary,
-                static_cast<uint32_t>(blob.size()),
-                blob.data()
-            };
+
+    const DCAtomicField *param_atomic_field = field->as_atomic_field();
+    if (param_atomic_field != nullptr) {
+        auto sub_builder = builder << open_document;
+        size_t parameters = param_atomic_field->get_num_elements();
+        for(unsigned int i = 0; i < parameters; ++i) {
+            // Grab each parameter and run through it in dc2bson.
+            DCParameter *parameter = param_atomic_field->get_element(i);
+            string name = parameter->get_name();
+            if(name.empty()) {
+                stringstream n;
+                n << "_" << i;
+                name = n.str();
+            }
+
+            dc2bson(sub_builder << name, parameter, dgi);
         }
+
+        sub_builder << close_document;
+        return;
     }
-    break;
-    case ST_blob32: {
-        vector<uint8_t> blob = dgi.read_blob();
-        if(blob.data() == nullptr) {
-            // libbson gets upset if passed a nullptr here, but it's valid for
-            // vector.data() to return nullptr if it's empty, so we make
-            // something up instead:
-            builder << b_binary { bsoncxx::binary_sub_type::k_binary, 0, (const uint8_t*)1 };
-        } else {
-            builder << b_binary {
-                bsoncxx::binary_sub_type::k_binary,
-                static_cast<uint32_t>(blob.size()),
-                blob.data()
-            };
+
+    // Past this point field is guaranteed to be a DCParameter
+    const DCSwitchParameter *param_switch = ((DCParameter*)field)->as_switch_parameter();
+    if (param_switch != nullptr) {
+        // XXX TODO
+        assert(false);
+        return;
+    }
+
+    const DCClassParameter *param_class = ((DCParameter*)field)->as_class_parameter();
+    if (param_class != nullptr) {
+        auto sub_builder = builder << open_document;
+        size_t parameters = param_class->get_class()->get_num_inherited_fields();
+        for(unsigned int i = 0; i < parameters; ++i) {
+            // Grab each field and run through it in dc2bson.
+            DCField *class_field = param_class->get_class()->get_inherited_field(i);
+            dc2bson(sub_builder << class_field->get_name(), class_field, dgi);
         }
+
+        sub_builder << close_document;
+        return;
     }
-    break;
-    case ST_int8array:
-    case ST_int16array:
-    case ST_int32array:
-    case ST_uint8array:
-    case ST_uint16array:
-    case ST_uint32uint8array: {
-        const DCArrayParameter *array = type->as_array_parameter();
+
+    const DCArrayParameter *param_array = ((DCParameter*)field)->as_array_parameter();
+    if (param_array != nullptr) {
+        const DCParameter *element_type = param_array->get_element_type();
 
         auto sub_builder = builder << open_array;
 
-        for(int i = 0; i < array->get_array_size(); i++) {
-            dc2bson(sub_builder, array->get_element_type()->as_simple_parameter(), dgi);
+        dgsize_t array_length;
+        if (param_array->has_fixed_byte_size()) {
+            array_length = param_array->get_fixed_byte_size();
+        }
+
+        else {
+            array_length = dgi.read_size();
+        }
+
+        dgsize_t starting_size = dgi.tell();
+        while (dgi.tell() != starting_size + array_length) {
+            dc2bson(sub_builder, element_type, dgi);
+            if (dgi.tell() > starting_size + array_length) {
+                throw ConversionException("Discovered corrupt array-length tag!");
+            }
         }
 
         sub_builder << close_array;
+        return;
     }
-    break;
-    case ST_invalid:
-    default:
-        assert(false);
+
+    const DCSimpleParameter* param_simple = ((DCParameter*)field)->as_simple_parameter();
+    switch(param_simple->get_type()) {
+        case ST_int8: {
+            builder << b_int32 {dgi.read_int8()};
+        }
         break;
+
+        case ST_int16: {
+            builder << b_int32 {dgi.read_int16()};
+        }
+        break;
+
+        case ST_int32: {
+            builder << b_int32 {dgi.read_int32()};
+        }
+        break;
+
+        case ST_int64: {
+            builder << b_int64 {dgi.read_int64()};
+        }
+        break;
+
+        case ST_uint8: {
+            builder << b_int32 {dgi.read_uint8()};
+        }
+        break;
+
+        case ST_uint16: {
+            builder << b_int32 {dgi.read_uint16()};
+        }
+        break;
+
+        case ST_uint32: {
+            builder << b_int64 {dgi.read_uint32()};
+        }
+        break;
+
+        case ST_uint64: {
+            // Note: Values over 1/2 the maximum will become negative.
+            builder << b_int64 {static_cast<int64_t>(dgi.read_uint64())};
+        }
+        break;
+
+
+        case ST_char: {
+            unsigned char c = dgi.read_uint8();
+            string str(1, c);
+            builder << b_utf8 {str};
+        }
+        break;
+
+        case ST_float64: {
+            builder << b_double {dgi.read_float64()};
+        }
+        break;
+
+        case ST_string: {
+            vector<uint8_t> vec = dgi.read_data(dgi.read_size());
+            string str((const char *)vec.data(), vec.size());
+            builder << b_utf8 {str};
+        }
+        break;
+
+        case ST_blob: {
+            vector<uint8_t> blob = dgi.read_data(dgi.read_size());
+            if(blob.data() == nullptr) {
+                // libbson gets upset if passed a nullptr here, but it's valid for
+                // vector.data() to return nullptr if it's empty, so we make
+                // something up instead:
+                builder << b_binary { bsoncxx::binary_sub_type::k_binary, 0, (const uint8_t*)1 };
+            } else {
+                builder << b_binary {
+                    bsoncxx::binary_sub_type::k_binary,
+                    static_cast<uint32_t>(blob.size()),
+                    blob.data()
+                };
+            }
+        }
+        break;
+
+        case ST_blob32: {
+            vector<uint8_t> blob = dgi.read_data(dgi.read_uint32());
+            if(blob.data() == nullptr) {
+                // libbson gets upset if passed a nullptr here, but it's valid for
+                // vector.data() to return nullptr if it's empty, so we make
+                // something up instead:
+                builder << b_binary { bsoncxx::binary_sub_type::k_binary, 0, (const uint8_t*)1 };
+            } else {
+                builder << b_binary {
+                    bsoncxx::binary_sub_type::k_binary,
+                    static_cast<uint32_t>(blob.size()),
+                    blob.data()
+                };
+            }
+        }
+        break;
+
+        case ST_invalid:
+        default:
+            assert(false);
+            break;
     }
 }
 
@@ -233,45 +311,149 @@ template<typename T> T handle_bson_number(const bsoncxx::types::value &value)
     return static_cast<T>(i);
 }
 
-static void bson2dc(DCSimpleParameter *type,
+static void bson2dc(const DCField *field,
                     const string &field_name,
                     const bsoncxx::types::value &value,
                     Datagram &dg)
 {
+    const DCMolecularField *param_molecular_field = field->as_molecular_field();
+    if (param_molecular_field != nullptr) {
+        // XXX TODO
+        assert(false);
+        return;
+    }
+
+    const DCAtomicField *param_atomic_field = field->as_atomic_field();
+    if (param_atomic_field != nullptr) {
+        if(value.type() != bsoncxx::type::k_document) {
+           throw ConversionException("Expected sub-document");
+        }
+        auto document = value.get_document().value;
+
+        size_t parameters = param_atomic_field->get_num_elements();
+        for(unsigned int i = 0; i < parameters; ++i) {
+            const DCParameter *parameter = param_atomic_field->get_element(i);
+            string name = parameter->get_name();
+            if(name.empty() || !document[name]) {
+                stringstream n;
+                n << "_" << i;
+                name = n.str();
+            }
+            auto element = document[name];
+            if(!element) {
+                throw ConversionException("Parameter is absent", parameter->get_name());
+            }
+            bson2dc(parameter, name, element.get_value(), dg);
+        }
+
+        return;
+    }
+
+    // Past this point field is guaranteed to be a DCParameter
+    const DCSwitchParameter *param_switch = field->as_switch_parameter();
+    if (param_switch != nullptr) {
+        // XXX TODO
+        assert(false);
+        return;
+    }
+
+    const DCClassParameter *param_class = ((DCParameter*)field)->as_class_parameter();
+    if (param_class != nullptr) {
+        if(value.type() != bsoncxx::type::k_document) {
+            throw ConversionException("Expected sub-document");
+        }
+        auto document = value.get_document().value;
+
+        size_t parameters = param_class->get_class()->get_num_inherited_fields();
+        for(unsigned int i = 0; i < parameters; ++i) {
+            // Grab each field and run through it in bson2dc.
+            DCField *class_field = param_class->get_class()->get_inherited_field(i);
+            auto element = document[class_field->get_name()];
+            if(!element) {
+                throw ConversionException("Struct field is absent", class_field->get_name());
+            }
+            bson2dc(class_field, class_field->get_name(), element.get_value(), dg);
+        }
+
+        return;
+    }
+
+    const DCArrayParameter *param_array = ((DCParameter*)field)->as_array_parameter();
+    if (param_array != nullptr) {
+        if(value.type() != bsoncxx::type::k_array) {
+            throw ConversionException("Expected array");
+        }
+        auto array = value.get_array().value;
+
+        const DCParameter *element_type = param_array->get_element_type();
+
+        if (!param_array->has_fixed_byte_size()) {
+            DatagramPtr newdg = Datagram::create();
+            size_t index = 0;
+            for(const auto& it : array) {
+                stringstream array_index;
+                array_index << field_name << "[" << index++ << "]";
+                bson2dc(element_type, array_index.str(), it.get_value(), *newdg);
+            }
+
+            dg.add_blob(newdg->get_data(), newdg->size());
+        }
+
+        else {
+            size_t index = 0;
+            for(const auto& it : array) {
+                stringstream array_index;
+                array_index << field_name << "[" << index++ << "]";
+                bson2dc(element_type, array_index.str(), it.get_value(), dg);
+            }
+        }
+
+        return;
+    }
+
+    const DCSimpleParameter* param_simple = ((DCParameter*)field)->as_simple_parameter();
     try {
-        switch(type->get_type()) {
+        switch(param_simple->get_type()) {
         case ST_int8: {
             dg.add_int8(handle_bson_number<int8_t>(value));
         }
         break;
+
         case ST_int16: {
             dg.add_int16(handle_bson_number<int16_t>(value));
         }
         break;
+
         case ST_int32: {
             dg.add_int32(handle_bson_number<int32_t>(value));
         }
         break;
+
         case ST_int64: {
             dg.add_int64(handle_bson_number<int64_t>(value));
         }
         break;
+
         case ST_uint8: {
             dg.add_uint8(handle_bson_number<uint8_t>(value));
         }
         break;
+
         case ST_uint16: {
             dg.add_uint16(handle_bson_number<uint16_t>(value));
         }
         break;
+
         case ST_uint32: {
             dg.add_uint32(handle_bson_number<uint32_t>(value));
         }
         break;
+
         case ST_uint64: {
             dg.add_uint64(handle_bson_number<uint64_t>(value));
         }
         break;
+
         case ST_char: {
             if(value.type() != bsoncxx::type::k_utf8 || value.get_utf8().value.size() != 1) {
                 throw ConversionException("Expected single-length string for char field");
@@ -279,10 +461,12 @@ static void bson2dc(DCSimpleParameter *type,
             dg.add_uint8(value.get_utf8().value[0]);
         }
         break;
+
         case ST_float64: {
             dg.add_float64(handle_bson_number<double>(value));
         }
         break;
+
         case ST_string: {
             if(value.type() != bsoncxx::type::k_utf8) {
                 throw ConversionException("Expected string");
@@ -291,14 +475,16 @@ static void bson2dc(DCSimpleParameter *type,
             dg.add_string(str);
         }
         break;
+
         case ST_blob: {
             if(value.type() != bsoncxx::type::k_binary) {
                 throw ConversionException("Expected bindata");
             }
             auto binary = value.get_binary();
-            dg.add_data(binary.bytes, binary.size);
+            dg.add_blob(binary.bytes, binary.size);
         }
         break;
+
         case ST_blob32: {
             if(value.type() != bsoncxx::type::k_binary) {
                 throw ConversionException("Expected bindata");
@@ -307,41 +493,7 @@ static void bson2dc(DCSimpleParameter *type,
             dg.add_blob(binary.bytes, binary.size);
         }
         break;
-        case ST_int8array:
-        case ST_int16array:
-        case ST_int32array:
-        case ST_uint8array:
-        case ST_uint16array:
-        case ST_uint32array: {
-            if(value.type() != bsoncxx::type::k_array) {
-                throw ConversionException("Expected array");
-            }
-            DCSimpleParameter *element_type = type->as_array_parameter()->get_element_type()->as_simple_parameter();
-            auto array = value.get_array().value;
 
-            size_t index = 0;
-            for(const auto& it : array) {
-                stringstream array_index;
-                array_index << "[" << index++ << "]";
-                bson2dc(element_type, array_index.str(), it.get_value(), dg);
-            }
-        }
-        break;
-        case ST_uint32uint8array: {
-            if(value.type() != bsoncxx::type::k_array) {
-                throw ConversionException("Expected array");
-            }
-            DCSimpleParameter *element_type = type->as_array_parameter()->get_element_type()->as_simple_parameter();
-            auto array = value.get_array().value;
-
-            size_t index = 0;
-            for(const auto& it : array) {
-                stringstream array_index;
-                array_index << "[" << index++ << "]";
-                bson2dc(element_type, array_index.str(), it.get_value(), dg);
-            }
-        }
-        break;
         case ST_invalid:
         default:
             assert(false);
@@ -492,17 +644,7 @@ class MongoDatabase : public DatabaseBackend
                 DatagramPtr dg = Datagram::create();
                 dg->add_data(it.second);
                 DatagramIterator dgi(dg);
-
-                DCAtomicField *atomic_field = it.first->as_atomic_field();
-                size_t parameters = atomic_field->get_num_elements();
-
-                for(unsigned int i = 0; i < parameters; ++i) {
-                    // Grab each simple parameter and run through it in dc2bson.
-                    DCParameter *parameter = atomic_field->get_element(i);
-                    DCSimpleParameter *simple_parameter = parameter->as_simple_parameter();
-
-                    dc2bson(builder << it.first->get_name(), simple_parameter, dgi);
-                }
+                dc2bson(builder << it.first->get_name(), it.first, dgi);
             }
         } catch(ConversionException &e) {
             m_log->error() << "While formatting "
@@ -610,17 +752,7 @@ class MongoDatabase : public DatabaseBackend
                 DatagramPtr dg = Datagram::create();
                 dg->add_data(it.second);
                 DatagramIterator dgi(dg);
-
-                DCAtomicField *atomic_field = it.first->as_atomic_field();
-                size_t parameters = atomic_field->get_num_elements();
-
-                for(unsigned int i = 0; i < parameters; ++i) {
-                    // Grab each simple parameter and run through it in dc2bson.
-                    DCParameter *parameter = atomic_field->get_element(i);
-                    DCSimpleParameter *simple_parameter = parameter->as_simple_parameter();
-
-                    dc2bson(sets_builder << fieldname.str(), simple_parameter, dgi);
-                }
+                dc2bson(sets_builder << fieldname.str(), it.first, dgi);
             }
         }
         auto sets = sets_builder << finalize;
@@ -643,17 +775,7 @@ class MongoDatabase : public DatabaseBackend
                 DatagramPtr dg = Datagram::create();
                 dg->add_data(it.second);
                 DatagramIterator dgi(dg);
-
-                DCAtomicField *atomic_field = it.first->as_atomic_field();
-                size_t parameters = atomic_field->get_num_elements();
-
-                for(unsigned int i = 0; i < parameters; ++i) {
-                    // Grab each simple parameter and run through it in dc2bson.
-                    DCParameter *parameter = atomic_field->get_element(i);
-                    DCSimpleParameter *simple_parameter = parameter->as_simple_parameter();
-
-                    dc2bson(query << fieldname.str(), simple_parameter, dgi);
-                }
+                dc2bson(query << fieldname.str(), it.first, dgi);
             }
         }
         auto query_obj = query << finalize;
@@ -789,22 +911,10 @@ class MongoDatabase : public DatabaseBackend
                     continue;
                 }
 
-                DCAtomicField *atomic_field = field->as_atomic_field();
-                size_t parameters = atomic_field->get_num_elements();
-
                 // Create the datagram that bson2dc will store
                 // the field data in.
                 DatagramPtr dg = Datagram::create();
-
-                for(unsigned int i = 0; i < parameters; ++i) {
-                    // Grab the type through the simple parameter.
-                    DCParameter *parameter = atomic_field->get_element(i);
-                    DCSimpleParameter *simple_parameter = parameter->as_simple_parameter();
-
-                    // Run through the parameter in bson2dc.
-                    bson2dc(simple_parameter, field->get_name(), it.get_value(), *dg);
-                }
-
+                bson2dc(field, field->get_name(), it.get_value(), *dg);
                 snap->m_fields[field].resize(dg->size());
                 memcpy(snap->m_fields[field].data(), dg->get_data(), dg->size());
             }
