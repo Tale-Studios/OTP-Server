@@ -300,17 +300,11 @@ void printCompiledOptions(ostream &s)
 
       //If on, datagrams and dclass fields will use 32-bit length tags instead of 16-bit.
 #ifdef OTP_32BIT_DATAGRAMS
-      "32-bit length tag Datagrams, "
+      "32-bit length tag Datagrams"
 #else
-      "16-bit length tag Datagrams, "
+      "16-bit length tag Datagrams"
 #endif
 
-      //If on, channels will be 128-bit and doids and zones will be 64-bit (instead of 64/32).
-#ifdef OTP_128BIT_CHANNELS
-      "128-bit channel space, 64-bit distributed object id's, 64-bit zones"
-#else
-      "64-bit channel space, 32-bit distributed object id's, 32-bit zones"
-#endif
       << "\n";
 
     //Now print what parts are compiled in.
@@ -337,10 +331,6 @@ void printCompiledOptions(ostream &s)
 #ifdef BUILD_DB_YAML
       "(With YAML Support) "
 #endif //End DB_YAML
-
-#ifdef BUILD_DB_SQL
-      "(With SQL DB Support) "
-#endif //End DB_SQL
 
 #endif //End DBSERVER
       "\n";

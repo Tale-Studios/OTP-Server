@@ -96,7 +96,7 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")        ### Linux requires pthreads
     list(APPEND EXTRA_LIBS pthread rt)
 endif()
 
-### YAML Depedency -- required by config, used by yaml database ###
+### YAML dependency -- required by config, used by yaml database ###
 set(YAMLCPP_USE_STATIC_LIBS ON CACHE BOOL "If true, will try to find static YamlCpp first instead of dynamic.")
 find_package(YamlCpp REQUIRED)
 include_directories(${YAMLCPP_INCLUDE_DIR})
@@ -129,11 +129,6 @@ set(USE_32BIT_SIZETAGS OFF CACHE BOOL
     "If on, dclass fields will use 32-bit length tags instead of 16-bit.")
 if(USE_32BIT_SIZETAGS)
     add_definitions(-DDCLASS_32BIT_SIZETAG)
-endif()
-set(USE_128BIT_CHANNELS OFF CACHE BOOL
-    "If on, channels will be 128-bit and doids and zones will be 64-bit (instead of 64/32).")
-if(USE_128BIT_CHANNELS)
-    add_definitions(-DOTP_128BIT_CHANNELS)
 endif()
 
 set(BUILD_TESTS OFF CACHE BOOL "If set to true, test files will be compiled in")
@@ -209,83 +204,9 @@ if(BUILD_DBSERVER)
         # TODO: Config validation test
         list(APPEND PYTHON_TESTS db_mongo)
     endif()
-
-    ### Check for soci and if available, compile SQL database support ###
-    find_package(Soci COMPONENTS postgresql mysql sqlite3)
-
-    if(SOCI_FOUND)
-        message(STATUS "Found the following Soci library:")
-        message("  ${SOCI_LIBRARY}\n")
-
-        message(STATUS "Found the following Soci plugins:")
-        ### PostgreSQL support ##
-        if(SOCI_postgresql_FOUND)
-            set(BUILD_DB_POSTGRESQL ON CACHE BOOL "If on, will support PostgreSQL.")
-            message(STATUS "  PostgreSQL found")
-            message("    ${SOCI_postgresql_PLUGIN}")
-        else()
-            unset(BUILD_DB_POSTGRESQL CACHE)
-            message(STATUS "  PostgreSQL not found")
-            message("    won't add PostgreSQl support")
-        endif()
-
-        ### MySQL support ###
-        if(SOCI_mysql_FOUND)
-            set(BUILD_DB_MYSQL ON CACHE BOOL "If on, will support MySQL.")
-            message(STATUS "  MySQL found")
-            message("    ${SOCI_mysql_PLUGIN}")
-        else()
-            unset(BUILD_DB_MYSQL CACHE)
-            message(STATUS "  MySQL not found")
-            message("    won't add MySQL support")
-        endif()
-
-        ### SQLite3 support ###
-        if(SOCI_sqlite3_FOUND)
-            set(BUILD_DB_SQLITE ON CACHE BOOL "If on, will support SQLite3.")
-            message(STATUS "  SQLite3 found")
-            message("    ${SOCI_sqlite3_PLUGIN}")
-        else()
-            unset(BUILD_DB_SQLITE CACHE)
-            message(STATUS "  SQLite3 not found")
-            message("    won't add SQLite3 support")
-        endif()
-
-        message("")
-
-        ### Add files to compiler and linker ###
-        if(BUILD_DB_SQLITE OR BUILD_DB_MYSQL OR BUILD_DB_POSTGRESQL)
-            add_definitions(-DBUILD_DB_SQL)
-            include_directories(${SOCI_INCLUDE_DIRS})
-            link_directories(${SOCI_LIBRARY_DIR})
-            set(DBSERVER_FILES
-                ${DBSERVER_FILES}
-                src/database/SociSQLDatabase.cpp
-            )
-
-            list(APPEND DB_LIBRARY_NAMES soci_core dl)
-            if(BUILD_DB_POSTGRESQL)
-                list(APPEND DB_LIBRARY_NAMES pq)
-                add_test(db_pgsql
-                    "${PYTHON2_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/test/test_dbserver_postgres.py")
-                add_test(validate_config_dbpostgres
-                    "${PYTHON2_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/test/test_config_dbpostgres.py")
-                set(PYTHON_TESTS ${PYTHON_TESTS} db_pgsql validate_config_dbpostgres)
-            endif()
-        endif()
-    else()
-        message(STATUS "Soci not found")
-        message("  won't add SQL support")
-        unset(BUILD_DB_MYSQL CACHE)
-        unset(BUILD_DB_POSTGRESQL CACHE)
-        unset(BUILD_DB_SQLITE CACHE)
-    endif()
 else()
     unset(BUILD_DB_FILESYSTEM CACHE)
     unset(BUILD_DB_YAML CACHE)
-    unset(BUILD_DB_MYSQL CACHE)
-    unset(BUILD_DB_POSTGRESQL CACHE)
-    unset(BUILD_DB_SQLITE CACHE)
     unset(BUILD_DB_MONGO CACHE)
 endif()
 
@@ -472,9 +393,6 @@ install(TARGETS otp_server DESTINATION bin)
 ### Handle some final testing configuration ###
 if(USE_32BIT_DATAGRAMS)
     set(PYTHON_TEST_ENV ${PYTHON_TEST_ENV} "USE_32BIT_DATAGRAMS=true")
-endif()
-if(USE_128BIT_CHANNELS)
-    set(PYTHON_TEST_ENV ${PYTHON_TEST_ENV} "USE_128BIT_CHANNELS=true")
 endif()
 if(PYTHON_TEST_ENV)
     set_tests_properties(${PYTHON_TESTS} PROPERTIES ENVIRONMENT "${PYTHON_TEST_ENV}")

@@ -254,29 +254,15 @@ if 'USE_32BIT_SIZETAGS' in os.environ:
 else:
     DATATYPES['size'] = '<H'
 
-if 'USE_128BIT_CHANNELS' in os.environ:
-    CONSTANTS['PARENT_PREFIX'] = 1 << 64;
-    CONSTANTS['CHANNEL_MAX'] = (1 << 128) - 1
-    CONSTANTS['CHANNEL_SIZE_BYTES'] = 16
-    DATATYPES['doid'] = '<Q'
-    CONSTANTS['DOID_MAX'] = (1 << 64) - 1
-    CONSTANTS['DOID_SIZE_BYTES'] = 8
-    DATATYPES['zone'] = '<Q'
-    CONSTANTS['ZONE_MAX'] = (1 << 64) - 1
-    CONSTANTS['ZONE_SIZE_BYTES'] = 8
-    CONSTANTS['ZONE_SIZE_BITS'] = 64
-    CONSTANTS['PARENT_PREFIX'] = 1 << 64
-    CONSTANTS['DATABASE_PREFIX'] = 2 << 64
-else:
-    CONSTANTS['CHANNEL_MAX'] = (1 << 64) - 1
-    CONSTANTS['CHANNEL_SIZE_BYTES'] = 8
-    DATATYPES['doid'] = '<I'
-    CONSTANTS['DOID_MAX'] = (1 << 32) - 1
-    CONSTANTS['DOID_SIZE_BYTES'] = 4
-    DATATYPES['zone'] = '<I'
-    CONSTANTS['ZONE_MAX'] = (1 << 32) - 1
-    CONSTANTS['ZONE_SIZE_BYTES'] = 4
-    CONSTANTS['ZONE_SIZE_BITS'] = 32
+CONSTANTS['CHANNEL_MAX'] = (1 << 64) - 1
+CONSTANTS['CHANNEL_SIZE_BYTES'] = 8
+DATATYPES['doid'] = '<I'
+CONSTANTS['DOID_MAX'] = (1 << 32) - 1
+CONSTANTS['DOID_SIZE_BYTES'] = 4
+DATATYPES['zone'] = '<I'
+CONSTANTS['ZONE_MAX'] = (1 << 32) - 1
+CONSTANTS['ZONE_SIZE_BYTES'] = 4
+CONSTANTS['ZONE_SIZE_BITS'] = 32
 
 CONSTANTS['USE_THREADING'] = 'DISABLE_THREADING' not in os.environ
 
@@ -312,11 +298,7 @@ class Datagram(object):
         self.add_raw(dg.get_data())
 
     def add_channel(self, channel):
-        if 'USE_128BIT_CHANNELS' in os.environ:
-            max_int64 = 0xFFFFFFFFFFFFFFFF
-            self.add_raw(struct.pack('<QQ', channel & max_int64, (channel >> 64) & max_int64))
-        else:
-            self.add_uint64(channel)
+        self.add_uint64(channel)
 
     def get_data(self):
         return self._data
@@ -457,11 +439,7 @@ class DatagramIterator(object):
             return unpacked
 
     def read_channel(self):
-        if 'USE_128BIT_CHANNELS' in os.environ:
-            a, b = self.read_format('<QQ')
-            return (b << 64) | a
-        else:
-            return self.read_uint64()
+        return self.read_uint64()
 
     def matches_header(self, recipients, sender, msgtype, remaining=-1):
         self.seek(0)

@@ -97,7 +97,7 @@ class ConfigGroup
               A: 3
 
         backend
-            - type: "mysql"  # ConfigGroup("mysql", backend_group)
+            - type: "yaml"  # ConfigGroup("yaml", backend_group)
               B: "Tasty food"
  */
 class KeyedConfigGroup : public ConfigGroup

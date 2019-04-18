@@ -3,16 +3,9 @@
 #include <cstdint>
 
 /* Type definitions */
-#ifdef OTP_128BIT_CHANNELS
-#include "util/uint128.h"
-typedef uint128_t channel_t;
-typedef uint64_t doid_t;
-typedef uint64_t zone_t;
-#else
 typedef uint64_t channel_t;
 typedef uint32_t doid_t;
 typedef uint32_t zone_t;
-#endif
 
 /* Type limits */
 const channel_t CHANNEL_MAX = (channel_t)(-1);

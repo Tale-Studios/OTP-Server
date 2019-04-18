@@ -486,11 +486,6 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
                              << do_id << ".\n";
             return;
         }
-        if(m_owned_objects.find(do_id) == m_owned_objects.end()) {
-            m_log->warning() << "Received add session object for non-owned object "
-                             << do_id << ".\n";
-            return;
-        }
 
         m_log->debug() << "Added session object with id " << do_id << ".\n";
 
