@@ -69,27 +69,21 @@ class InterestOperation
     std::unordered_set<zone_t> m_zones;
     channel_t m_caller;
 
-    unsigned long m_timeout_interval;
-    Timeout* m_timeout = nullptr;
-
     bool m_has_total = false;
     doid_t m_total = 0; // as doid_t because <max_objs_in_zones> == <max_total_objs>
     doid_t m_generated_objects = 0;
 
-    InterestOperation(Client *client, unsigned long timeout,
+    std::map<uint16_t, DatagramHandle> m_pending_generates;
+
+    InterestOperation(Client *client,
                       uint16_t interest_id, uint32_t client_context, uint32_t request_context,
                       doid_t parent, std::unordered_set<zone_t> zones, channel_t caller);
     ~InterestOperation();
 
     bool is_ready();
     void set_expected(doid_t total);
-    void add_object(doid_t object);
-    void finish(bool is_timeout = false);
-    void on_timeout_generate(Timeout* timeout);
-    void timeout();
-
-  private:
-    bool m_finished = false;
+    void add_object(DatagramHandle dg, uint16_t dc_id, bool with_other);
+    void finish();
 };
 
 class Client : public MDParticipantInterface

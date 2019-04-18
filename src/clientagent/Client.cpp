@@ -251,7 +251,7 @@ void Client::add_interest(Interest &i, uint32_t context, channel_t caller)
 
     uint32_t request_context = m_next_context++;
 
-    InterestOperation *iop = new InterestOperation(this, m_client_agent->m_interest_timeout,
+    InterestOperation *iop = new InterestOperation(this,
             i.id, context, request_context, i.parent, new_zones, caller);
     m_pending_interests.emplace(request_context, iop);
 
@@ -605,6 +605,7 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
         doid_t do_id = dgi.read_doid();
         doid_t parent = dgi.read_doid();
         zone_t zone = dgi.read_zone();
+        uint16_t dc_id = dgi.read_uint16();
 
         bool with_other = (msgtype == STATESERVER_OBJECT_ENTER_LOCATION_WITH_REQUIRED_OTHER);
 
@@ -620,7 +621,12 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
 
                 // Notify the IOP of this object's existence, so that the operation
                 // can know which object is generated and which objects aren't.
-                interest_operation->add_object(do_id);
+                interest_operation->add_object(in_dg, dc_id, with_other);
+
+                // If there are other fields, don't generate yet...
+                if(with_other) {
+                    return;
+                }
             }
         }
 
@@ -806,7 +812,7 @@ void Client::notify_interest_done(uint16_t interest_id, channel_t caller)
  *       HELPER CLASSES       *
  * ========================== */
 InterestOperation::InterestOperation(
-    Client *client, unsigned long timeout,
+    Client *client,
     uint16_t interest_id, uint32_t client_context, uint32_t request_context,
     doid_t parent, unordered_set<zone_t> zones, channel_t caller) :
     m_client(client),
@@ -814,66 +820,38 @@ InterestOperation::InterestOperation(
     m_client_context(client_context),
     m_request_context(request_context),
     m_parent(parent), m_zones(zones),
-    m_caller(caller),
-    m_timeout_interval(timeout)
+    m_caller(caller)
 {
-    m_client->generate_timeout(bind(&InterestOperation::on_timeout_generate, this,
-                               std::placeholders::_1));
 }
 
 InterestOperation::~InterestOperation()
 {
-    if(!m_finished)
-    {
-        m_client->m_log->warning() << "Interest operation failed; deleting.\n";
-        delete this;
-    }
 }
 
-void InterestOperation::on_timeout_generate(Timeout* timeout)
+void InterestOperation::finish()
 {
-    assert(std::this_thread::get_id() == g_main_thread_id);
+    // Iterate through each pending generate and generate
+    // in order of dclass id.
+    for(auto it = m_pending_generates.begin(); it != m_pending_generates.end(); ++it) {
+        // Grab the entrance datagram, skipping redundant information.
+        DatagramIterator dgi(it->second);
+        dgi.seek_payload();
+        dgi.skip(sizeof(channel_t) + sizeof(uint16_t)); // sender + msgtype
 
-    m_timeout = timeout;
-    m_timeout->initialize(m_timeout_interval, bind(&InterestOperation::timeout, this));
-    m_timeout->start();
-}
-
-void InterestOperation::timeout()
-{
-    lock_guard<recursive_mutex> lock(m_client->m_client_lock);
-    m_client->m_log->warning() << "Interest operation timed out; forcing.\n";
-    finish(true);
-}
-
-void InterestOperation::finish(bool is_timeout)
-{
-    if(!is_timeout && m_timeout != nullptr) {
-        if(!m_timeout->cancel()) {
-            // The timeout is already running; let it clean up instead.
-            return;
-        }
-
-        // We've already invoked cancel on the m_timeout object:
-        // It's gonna get around to deleting itself as soon as the async operation runs, so it's not safe to hold onto its pointer.
-        m_timeout = nullptr;
+        // Generate the object on the client.
+        m_client->handle_object_entrance(dgi, true);
     }
 
     // Distribute the interest done message.
-    if(m_caller == m_client->m_channel)
-    {
+    if(m_caller == m_client->m_channel) {
         m_client->handle_interest_done(m_interest_id, m_client_context);
     }
-    else
-    {
+    else {
         m_client->notify_interest_done(m_interest_id, m_caller);
     }
 
     // Delete the Interest Operation.
     m_client->m_pending_interests.erase(m_request_context);
-
-    m_finished = true;
-
     delete this;
 }
 
@@ -890,15 +868,19 @@ void InterestOperation::set_expected(doid_t total)
     }
 }
 
-void InterestOperation::add_object(doid_t do_id)
+void InterestOperation::add_object(DatagramHandle dg, uint16_t dc_id, bool with_other)
 {
     // One of our interested objects is being generated.
     // Increment our m_generated_objects, and check if we're ready to finish.
     m_generated_objects++;
 
-    // If all of our objects are now generated, finish.
-    if(is_ready())
-    {
-        finish(false);
+    // Store the datagram in our pending generates if this generate contains other fields.
+    if(with_other) {
+        m_pending_generates[dc_id] = dg;
+    }
+
+    // If all of our objects are here, finish.
+    if(is_ready()) {
+        finish();
     }
 }
