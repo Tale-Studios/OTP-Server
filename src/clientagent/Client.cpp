@@ -602,7 +602,6 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
     break;
     case STATESERVER_OBJECT_ENTER_LOCATION_WITH_REQUIRED:
     case STATESERVER_OBJECT_ENTER_LOCATION_WITH_REQUIRED_OTHER: {
-        doid_t do_id = dgi.read_doid();
         doid_t parent = dgi.read_doid();
         zone_t zone = dgi.read_zone();
         uint16_t dc_id = dgi.read_uint16();
@@ -621,12 +620,10 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
 
                 // Notify the IOP of this object's existence, so that the operation
                 // can know which object is generated and which objects aren't.
-                interest_operation->add_object(in_dg, dc_id, with_other);
+                interest_operation->add_object(in_dg, dc_id);
 
-                // If there are other fields, don't generate yet...
-                if(with_other) {
-                    return;
-                }
+                // Nothing else to do for us here.
+                return;
             }
         }
 
@@ -836,10 +833,14 @@ void InterestOperation::finish()
         // Grab the entrance datagram, skipping redundant information.
         DatagramIterator dgi(it->second);
         dgi.seek_payload();
-        dgi.skip(sizeof(channel_t) + sizeof(uint16_t)); // sender + msgtype
+        dgi.skip(sizeof(channel_t)); // sender
+
+        uint16_t msgtype = dgi.read_uint16();
+
+        bool with_other = (msgtype == STATESERVER_OBJECT_ENTER_LOCATION_WITH_REQUIRED_OTHER);
 
         // Generate the object on the client.
-        m_client->handle_object_entrance(dgi, true);
+        m_client->handle_object_entrance(dgi, with_other);
     }
 
     // Distribute the interest done message.
@@ -868,16 +869,14 @@ void InterestOperation::set_expected(doid_t total)
     }
 }
 
-void InterestOperation::add_object(DatagramHandle dg, uint16_t dc_id, bool with_other)
+void InterestOperation::add_object(DatagramHandle dg, uint16_t dc_id)
 {
     // One of our interested objects is being generated.
     // Increment our m_generated_objects, and check if we're ready to finish.
     m_generated_objects++;
 
-    // Store the datagram in our pending generates if this generate contains other fields.
-    if(with_other) {
-        m_pending_generates[dc_id] = dg;
-    }
+    // Store the datagram in our pending generates.
+    m_pending_generates[dc_id] = dg;
 
     // If all of our objects are here, finish.
     if(is_ready()) {

@@ -82,7 +82,7 @@ class InterestOperation
 
     bool is_ready();
     void set_expected(doid_t total);
-    void add_object(DatagramHandle dg, uint16_t dc_id, bool with_other);
+    void add_object(DatagramHandle dg, uint16_t dc_id);
     void finish();
 };
 
