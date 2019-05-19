@@ -47,6 +47,36 @@ void StateServer::handle_generate(DatagramIterator &dgi, bool has_other)
         return;
     }
 
+    // Make sure we aren't creating an object with a DOID of zero.
+    if(do_id == 0) {
+        m_log->error() << "Attempted to create an object with DOID 0.\n";
+        return;
+    }
+
+    // If the object doesn't have a parent or zone, then it must be the root object.
+    if(parent_id == 0 && zone_id == 0) {
+        // Make sure we don't already have a root object...
+        if(m_root_object) {
+            m_log->error() << "Attempted to create a root object when one already exists!\n";
+            return;
+        }
+
+        // Set our root object.
+        m_log->info() << "Root object registered to ID " << do_id << ".\n";
+        m_root_object = do_id;
+    }
+
+    // If we don't have a root object yet, the object couldn't possibly be valid in the tree.
+    if(m_root_object == 0) {
+        m_log->error() << "Attempted to create an object when there isn't a root object yet!\n";
+        return;
+    }
+
+    // Check if the parent is the root object.
+    if(m_root_object != 0 && parent_id == m_root_object) {
+        m_log->info() << "New AI server with ID " << do_id << " connected.\n";
+    }
+
     // Create the object
     DistributedObject *obj;
     try {

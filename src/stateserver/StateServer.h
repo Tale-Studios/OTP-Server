@@ -18,6 +18,7 @@ class StateServer : public Role
   protected:
     std::unique_ptr<LogCategory> m_log;
     std::unordered_map<doid_t, DistributedObject*> m_objs;
+    doid_t m_root_object = 0;
 
   private:
     void handle_generate(DatagramIterator &dgi, bool has_other);

@@ -32,7 +32,7 @@ void EventLogger::bind(const std::string &addr)
     // We have to make sure our bind happens within the context of the main thread.
     assert(std::this_thread::get_id() == g_main_thread_id);
 
-    m_log.info() << "Opening UDP socket..." << std::endl;
+    m_log.debug() << "Opening UDP socket..." << std::endl;
     auto addresses = resolve_address(addr, 7197, g_loop);
 
     if(addresses.size() == 0) {
@@ -62,7 +62,7 @@ void EventLogger::open_log()
 
     m_file.reset(new std::ofstream(filename));
 
-    m_log.info() << "Opened new log." << std::endl;
+    m_log.info() << "Opened log." << std::endl;
 }
 
 void EventLogger::cycle_log()

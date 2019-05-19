@@ -47,8 +47,6 @@ void MessageDirector::init_network()
     if(!m_initialized) {
         // Bind to port and listen for downstream servers
         if(bind_addr.get_val() != "unspecified") {
-            m_log.info() << "Opening listening socket..." << std::endl;
-
             TcpAcceptorCallback callback = std::bind(&MessageDirector::handle_connection,
                                            this, std::placeholders::_1);
 
@@ -58,6 +56,8 @@ void MessageDirector::init_network()
             m_net_acceptor = std::unique_ptr<TcpAcceptor>(new TcpAcceptor(callback, err_callback));
             m_net_acceptor->bind(bind_addr.get_val(), 7199);
             m_net_acceptor->start();
+
+            m_log.info() << "Opened server." << std::endl;
         }
 
         // Connect to upstream server and start handling received messages
@@ -300,7 +300,7 @@ void MessageDirector::on_remove_range(channel_t lo, channel_t hi)
 void MessageDirector::handle_connection(const std::shared_ptr<uvw::TcpHandle> &socket)
 {
     uvw::Addr remote = socket->peer();
-    m_log.info() << "Got an incoming connection from "
+    m_log.debug() << "New service connected from "
                  << remote.ip << ":" << remote.port << std::endl;
     new MDNetworkParticipant(socket); // It deletes itself when connection is lost
 }

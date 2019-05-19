@@ -169,7 +169,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    mainlog.info() << "Loading configuration file...\n";
+    mainlog.info() << "Reading configuration and DC files...\n";
 
     ifstream file(cfg_file.c_str());
     if(!file.is_open()) {
@@ -241,6 +241,9 @@ int main(int argc, char *argv[])
     catch(const ShutdownException& e) {
         return e.exit_code();
     }
+
+    // Log that the daemon has been initialized.
+    mainlog.info() << "Initialized OTP daemon.\n";
 
     // Run the main event loop
     int exit_code = 0;

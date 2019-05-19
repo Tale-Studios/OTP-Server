@@ -80,7 +80,7 @@ void MDNetworkParticipant::receive_datagram(DatagramHandle dg)
 
 void MDNetworkParticipant::receive_disconnect(const uvw::ErrorEvent &evt)
 {
-    logger().info() << "Lost connection from "
+    logger().debug() << "Lost service connection from "
                     << m_client->get_remote().ip << ":"
                     << m_client->get_remote().port << ": "
                     << evt.what() << std::endl;
