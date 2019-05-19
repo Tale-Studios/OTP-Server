@@ -309,7 +309,17 @@ void DistributedObject::begin_delete()
         route_datagram(dg);
     }
 
-    if(m_zone_objects.empty()) {
+    std::unordered_set<doid_t> doids;
+
+    for(auto kv : m_zone_objects) {
+        for(auto it : kv.second) {
+            doids.insert(it);
+        }
+    }
+
+    m_deletion_count = doids.size();
+
+    if(doids.size() < 1) {
         // We have no children. We can finish the deletion process now.
         if(m_parent_id) {
             // However, if we have a parent, we need to acknowledge
@@ -487,6 +497,9 @@ void DistributedObject::handle_datagram(DatagramHandle, DatagramIterator &dgi)
             break; // Not my AI!
         }
 
+        // Log the AI being deleted.
+        m_log->warning() << "AI channel " << m_ai_channel << " is now being deleted.\n";
+
         // Begin the deletion process.
         begin_delete();
 
@@ -495,9 +508,13 @@ void DistributedObject::handle_datagram(DatagramHandle, DatagramIterator &dgi)
     case STATESERVER_OBJECT_DELETE_RAM: {
         if(m_do_id != dgi.read_doid()) {
             if(m_deletion_process) {
-                // We received this from a child to acknowledge their
-                // deletion. We can delete ourselves now.
-                finish_delete(true);
+                // We've received this as a response from a child which is now deleted.
+                // Increment the amount of children that are deleted.
+                ++m_deleted;
+                if(m_deleted == m_deletion_count) {
+                    // All children are deleted. We can delete ourselves now.
+                    finish_delete(true);
+                }
             }
 
             // Nothing else to do here.

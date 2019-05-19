@@ -333,7 +333,7 @@ bool Client::is_historical_object(doid_t do_id)
 // Client::send_disconnect can be called by subclasses to handle logging the event.
 void Client::send_disconnect(uint16_t reason, const string &error_string, bool security)
 {
-    (security ? m_log->security() : m_log->error())
+    (security ? m_log->security() : m_log->debug())
             << "Ejecting client (" << reason << "): "
             << error_string << endl;
 
@@ -574,6 +574,12 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
             // the object has already been deleted and we don't want it to be deleted
             // again in the client's destructor.
             m_session_objects.erase(do_id);
+
+            // Eject the client since its session object has been deleted.
+            stringstream ss;
+            ss << "The session object with id " << do_id << " has been unexpectedly deleted.";
+            send_disconnect(CLIENT_DISCONNECT_SESSION_OBJECT_DELETED, ss.str());
+            return;
         }
 
         if(m_seen_objects.find(do_id) != m_seen_objects.end()) {

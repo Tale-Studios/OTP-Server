@@ -54,6 +54,8 @@ class DistributedObject : public MDParticipantInterface
     bool m_ai_explicitly_set;
     bool m_parent_synchronized;
     bool m_deletion_process = false;
+    uint16_t m_deleted = 0;
+    size_t m_deletion_count;
     uint32_t m_next_context;
     std::unordered_map<zone_t, std::unordered_set<doid_t>> m_zone_objects;
     LogCategory *m_log;
