@@ -367,10 +367,22 @@ void DistributedObject::finish_delete(bool notify_parent)
 
 void DistributedObject::delete_children()
 {
-    // We have at least one child, so we want to notify the children as well.
-    DatagramPtr dg = Datagram::create(parent_to_children(m_do_id), m_do_id,
-                                      STATESERVER_OBJECT_DELETE_CHILDREN);
-    route_datagram(dg);
+    // Collect a map of DC ID -> DO ID.
+    map<uint16_t, set<doid_t>> do_ids;
+    for(auto kv : m_zone_objects) {
+        for(auto it : kv.second) {
+            do_ids[m_stateserver->get_dcid(it)].insert(it);
+        }
+    }
+
+    // Iterate over the children in DC ID order and begin their deletion process.
+    for(auto dc_it = do_ids.begin(); dc_it != do_ids.end(); ++dc_it) {
+        for(const auto& it : dc_it->second) {
+            DatagramPtr dg = Datagram::create(it, m_do_id,
+                                              STATESERVER_OBJECT_DELETE_CHILDREN);
+            route_datagram(dg);
+        }
+    }
 }
 
 void DistributedObject::wake_children()

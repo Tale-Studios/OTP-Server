@@ -87,6 +87,7 @@ void StateServer::handle_generate(DatagramIterator &dgi, bool has_other)
         return;
     }
     m_objs[do_id] = obj;
+    m_dcids[do_id] = dc_id;
 }
 
 void StateServer::handle_delete_ai(DatagramIterator& dgi, channel_t sender)
