@@ -341,15 +341,20 @@ class OTPClient : public Client, public NetworkHandler
     // handle_remove_object should send a mesage to remove the object from the connected client.
     // Handler for cases where an object is no longer visible to the client;
     //     for example, when it changes zone, leaves visibility, or is deleted.
-    virtual void handle_remove_object(doid_t do_id)
+    virtual void handle_remove_object(doid_t do_id, bool deleted)
     {
         DatagramPtr resp = Datagram::create();
-        resp->add_uint16(CLIENT_OBJECT_LEAVING);
+        if(deleted) {
+            resp->add_uint16(CLIENT_OBJECT_DELETE);
+        }
+        else {
+            resp->add_uint16(CLIENT_OBJECT_DISABLE);
+        }
         resp->add_doid(do_id);
         m_client->send_datagram(resp);
     }
 
-    // handle_remove_ownership should notify the client it no has control of the object.
+    // handle_remove_ownership should notify the client it no longer has control of the object.
     // Handle when the client loses ownership of an object.
     virtual void handle_remove_ownership(doid_t do_id)
     {

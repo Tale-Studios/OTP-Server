@@ -231,9 +231,9 @@ class Client : public MDParticipantInterface
     // handle_remove_object should send a mesage to remove the object from the connected client.
     // Handler for cases where an object is no longer visible to the client;
     //     for example, when it changes zone, leaves visibility, or is deleted.
-    virtual void handle_remove_object(doid_t do_id) = 0;
+    virtual void handle_remove_object(doid_t do_id, bool deleted = false) = 0;
 
-    // handle_remove_ownership should notify the client it no has control of the object.
+    // handle_remove_ownership should notify the client it no longer has control of the object.
     // Handle when the client loses ownership of an object.
     virtual void handle_remove_ownership(doid_t do_id) = 0;
 
