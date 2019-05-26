@@ -359,7 +359,7 @@ class OTPClient : public Client, public NetworkHandler
     virtual void handle_remove_ownership(doid_t do_id)
     {
         DatagramPtr resp = Datagram::create();
-        resp->add_uint16(CLIENT_OBJECT_LEAVING_OWNER);
+        resp->add_uint16(CLIENT_OBJECT_DISABLE_OWNER);
         resp->add_doid(do_id);
         m_client->send_datagram(resp);
     }
