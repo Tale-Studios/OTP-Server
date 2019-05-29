@@ -200,6 +200,11 @@ class Client : public MDParticipantInterface
     // Handler for CLIENTAGENT_DROP.
     virtual void handle_drop() = 0;
 
+    // handle_cluster_datagram should be used by custom client handlers
+    // if they want to handle other cluster datagrams.
+    virtual bool handle_cluster_datagram(DatagramHandle in_dg, DatagramIterator &dgi,
+                                         channel_t sender, uint16_t msgtype) = 0;
+
     // handle_add_interest should inform the client of an interest added by the server.
     virtual void handle_add_interest(const Interest &i, uint32_t context) = 0;
 

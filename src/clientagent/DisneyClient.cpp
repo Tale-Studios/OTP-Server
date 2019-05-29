@@ -2,66 +2,58 @@
 #include "ClientMessages.h"
 #include "ClientFactory.h"
 #include "ClientAgent.h"
+#include "DisneyClientMessages.h"
 #include "net/NetworkClient.h"
+#include "json/json.hpp"
 #include "core/global.h"
 #include "core/msgtypes.h"
 #include "config/constraints.h"
+#include "dclass/dcPacker.h"
 #include "dclass/dcClass.h"
 #include "dclass/dcField.h"
 #include "util/Timeout.h"
 
 using namespace std;
+using json = nlohmann::json;
 
+static ConfigGroup disneyclient_config("libdisney", ca_client_config);
 
-static ConfigGroup otpclient_config("libotp", ca_client_config);
-static ConfigVariable<bool> relocate_owned("relocate", false, otpclient_config);
-static ConfigVariable<string> interest_permissions("add_interest", "visible", otpclient_config);
-static BooleanValueConstraint relocate_is_boolean(relocate_owned);
-
-static ConfigVariable<bool> send_hash_to_client("send_hash", true, otpclient_config);
-static ConfigVariable<bool> send_version_to_client("send_version", true, otpclient_config);
+static ConfigVariable<uint32_t> database_id_config("database_id", 4003, disneyclient_config);
+static ConfigVariable<string> database_file_config("database_file", "account-bridge.json", disneyclient_config);
+static ConfigVariable<bool> send_hash_to_client("send_hash", true, disneyclient_config);
+static ConfigVariable<bool> send_version_to_client("send_version", true, disneyclient_config);
 
 static ConfigVariable<uint64_t> write_buffer_size("write_buffer_size", 256 * 1024,
-        otpclient_config);
-static ConfigVariable<unsigned int> write_timeout_ms("write_timeout_ms", 6000, otpclient_config);
+        disneyclient_config);
+static ConfigVariable<unsigned int> write_timeout_ms("write_timeout_ms", 6000, disneyclient_config);
 
-//by default, have heartbeat disabled.
-static ConfigVariable<long> heartbeat_timeout_config("heartbeat_timeout", 0, otpclient_config);
+// By default, have heartbeat disabled.
+static ConfigVariable<long> heartbeat_timeout_config("heartbeat_timeout", 0, disneyclient_config);
 
-static bool is_permission_level(const string& str)
-{
-    return (str == "visible" || str == "disabled" || str == "enabled");
-}
-static ConfigConstraint<string> valid_permission_level(is_permission_level, interest_permissions,
-        "Permissions for add_interest must be one of 'visible', 'enabled', 'disabled'.");
-
-enum InterestPermission {
-    INTERESTS_ENABLED,
-    INTERESTS_VISIBLE,
-    INTERESTS_DISABLED
-};
-
-class OTPClient : public Client, public NetworkHandler
+class DisneyClient : public Client, public NetworkHandler
 {
   private:
     std::shared_ptr<NetworkClient> m_client;
+    uint32_t m_context = 0;
+    std::map<unsigned int, string> m_token_contexts;
     ConfigNode m_config;
+    string m_database_file;
+    uint32_t m_database_id;
     bool m_clean_disconnect;
     bool m_relocate_owned;
     bool m_send_hash;
     bool m_send_version;
-    InterestPermission m_interests_allowed;
 
-    //Heartbeat
+    // Heartbeat:
     long m_heartbeat_timeout;
     Timeout* m_heartbeat_timer = nullptr;
 
   public:
-    OTPClient(ConfigNode config, ClientAgent* client_agent, const std::shared_ptr<uvw::TcpHandle> &socket,
+    DisneyClient(ConfigNode config, ClientAgent* client_agent, const std::shared_ptr<uvw::TcpHandle> &socket,
                  const uvw::Addr &remote, const uvw::Addr &local, const bool haproxy_mode) :
         Client(config, client_agent), m_client(std::make_shared<NetworkClient>(this)),
-        m_config(config),
-        m_clean_disconnect(false), m_relocate_owned(relocate_owned.get_rval(config)),
+        m_config(config), m_database_file(database_file_config.get_rval(config)),
+        m_database_id(database_id_config.get_rval(config)), m_clean_disconnect(false),
         m_send_hash(send_hash_to_client.get_rval(config)),
         m_send_version(send_version_to_client.get_rval(config)),
         m_heartbeat_timeout(heartbeat_timeout_config.get_rval(config))
@@ -73,16 +65,6 @@ class OTPClient : public Client, public NetworkHandler
 
     inline void pre_initialize()
     {
-        // Set interest permissions
-        string permission_level = interest_permissions.get_rval(m_config);
-        if(permission_level == "enabled") {
-            m_interests_allowed = INTERESTS_ENABLED;
-        } else if(permission_level == "visible") {
-            m_interests_allowed = INTERESTS_VISIBLE;
-        } else {
-            m_interests_allowed = INTERESTS_DISABLED;
-        }
-
         // Set NetworkClient configuration.
         m_client->set_write_timeout(write_timeout_ms.get_rval(m_config));
         m_client->set_write_buffer(write_buffer_size.get_rval(m_config));
@@ -103,7 +85,7 @@ class OTPClient : public Client, public NetworkHandler
         //If heartbeat, start the heartbeat timer now.
         if(m_heartbeat_timeout != 0) {
             m_heartbeat_timer = new Timeout(m_heartbeat_timeout,
-                                std::bind(&OTPClient::heartbeat_timeout,
+                                std::bind(&DisneyClient::heartbeat_timeout,
                                           this));
             m_heartbeat_timer->start();
         }
@@ -145,7 +127,7 @@ class OTPClient : public Client, public NetworkHandler
             Client::send_disconnect(reason, error_string, security);
 
             DatagramPtr resp = Datagram::create();
-            resp->add_uint16(CLIENT_EJECT);
+            resp->add_uint16(CLIENT_GO_GET_LOST);
             resp->add_uint16(reason);
             resp->add_string(error_string);
             m_client->send_datagram(resp);
@@ -162,15 +144,17 @@ class OTPClient : public Client, public NetworkHandler
         DatagramIterator dgi(dg);
         try {
             switch(m_state) {
-            // Client has just connected and should only send "CLIENT_HELLO".
+            // Client has just connected and needs to login.
             case CLIENT_STATE_NEW:
-                handle_pre_hello(dgi);
+                m_state = CLIENT_STATE_ANONYMOUS;
+                handle_client_heartbeat();
+                handle_pre_auth(dgi);
                 break;
-            // Client has sent "CLIENT_HELLO" and can now access anonymous uberdogs.
+            // We don't differentiate between new and anonymous.
             case CLIENT_STATE_ANONYMOUS:
                 handle_pre_auth(dgi);
                 break;
-            // An Uberdog or AI has declared the Client authenticated and the client
+            // We have declared the Client authenticated and the client
             // can now interact with the server cluster normally.
             case CLIENT_STATE_ESTABLISHED:
                 handle_authenticated(dgi);
@@ -245,13 +229,6 @@ class OTPClient : public Client, public NetworkHandler
     {
         m_clean_disconnect = true;
         m_client->disconnect();
-    }
-
-    // handle_cluster_datagram is not used by us.
-    virtual bool handle_cluster_datagram(DatagramHandle in_dg, DatagramIterator &dgi,
-                                         channel_t sender, uint16_t msgtype)
-    {
-        return false;
     }
 
     // handle_add_interest should inform the client of an interest added by the server.
@@ -377,58 +354,282 @@ class OTPClient : public Client, public NetworkHandler
     {
         DatagramPtr resp = Datagram::create();
         resp->add_uint16(CLIENT_DONE_INTEREST_RESP);
-        resp->add_uint32(context);
         resp->add_uint16(interest_id);
+        resp->add_uint32(context);
         m_client->send_datagram(resp);
     }
 
-    // Client has just connected and should only send "CLIENT_HELLO"
-    // Only handles one message type, so it does not need to be split up.
-    virtual void handle_pre_hello(DatagramIterator &dgi)
+    // Method for packing field data.
+    virtual void pack_uint(DCPacker &packer, DCField *field, unsigned int value)
     {
-        uint16_t msg_type = dgi.read_uint16();
-        if(msg_type != CLIENT_HELLO) {
-            send_disconnect(CLIENT_DISCONNECT_NO_HELLO, "First packet is not CLIENT_HELLO");
-            return;
-        }
+        packer.raw_pack_uint16(field->get_number());
+        packer.begin_pack(field);
+        packer.pack_uint(value);
+        packer.end_pack();
+    }
 
-        //Now that message type is confirmed, reset timeout watchdog.
-        handle_client_heartbeat();
+    virtual void pack_string(DCPacker &packer, DCField *field, const string value)
+    {
+        packer.raw_pack_uint16(field->get_number());
+        packer.begin_pack(field);
+        packer.pack_string(value);
+        packer.end_pack();
+    }
 
-        uint32_t dc_hash = dgi.read_uint32();
+    // Toontown client wants to login.
+    virtual void handle_client_login_toontown(DatagramIterator &dgi)
+    {
+        string play_token = dgi.read_string();
         string version = dgi.read_string();
+        uint32_t dc_hash = dgi.read_uint32();
+        int32_t token_type = dgi.read_int32();
+        string want_magic_words = dgi.read_string();
 
+        lock_guard<recursive_mutex> lock(m_client_lock);
+
+        // Before we worry about the play token, we need to compare
+        // the DC hash and server version we received.
         if(version != m_client_agent->get_version()) {
             stringstream ss;
-            ss << "Client version mismatch: client=" << version;
+            ss << "Bad DC Version Compare: client=" << version;
             if(m_send_version) {
                 ss << ", server=" << m_client_agent->get_version();
             }
 
-            send_disconnect(CLIENT_DISCONNECT_BAD_VERSION, ss.str());
+            login_toontown_response(-1, ss.str(), "", 0);
 
             return;
         }
 
+        // Now, check the DC hash.
         const static uint32_t expected_hash = m_client_agent->get_hash();
         if(dc_hash != expected_hash) {
             stringstream ss;
-            ss << "Client DC hash mismatch: client=0x" << hex << dc_hash;
+            ss << "Bad DC Version Compare: client=0x" << hex << dc_hash;
             if(m_send_hash) {
                 ss << ", server=0x" << expected_hash;
             }
-            send_disconnect(CLIENT_DISCONNECT_BAD_DCHASH, ss.str());
+
+            login_toontown_response(-1, ss.str(), "", 0);
+
             return;
         }
 
-        DatagramPtr resp = Datagram::create();
-        resp->add_uint16(CLIENT_HELLO_RESP);
-        m_client->send_datagram(resp);
+        // Read our JSON account bridge.
+        ifstream acc_file(m_database_file);
+        if(acc_file) {
+            // Our account bridge is valid, so let's parse:
+            json acc_bridge = json::parse(acc_file);
 
-        m_state = CLIENT_STATE_ANONYMOUS;
+            // Check if the play token exists in the account bridge.
+            if(acc_bridge.find(play_token) != acc_bridge.end()) {
+                // We already have an Account, so let's go ahead and login.
+                string strid = acc_bridge[play_token].get<string>();
+                stringstream ss(strid);
+                doid_t do_id;
+                ss >> do_id;
+                login_account(play_token, do_id);
+                return;
+            }
+        }
+
+        // We'll need to create an Account object.
+        // Instantiate a packer and start packing Account fields.
+        DCPacker packer;
+        DCClass *account = g_dcf->get_class_by_name("Account");
+
+        // First, pack default values for ACCOUNT_AV_SET.
+        DCField *av_set_field = account->get_field_by_name("ACCOUNT_AV_SET");
+        packer.raw_pack_uint16(av_set_field->get_number());
+        packer.begin_pack(av_set_field);
+        packer.pack_default_value();
+        packer.end_pack();
+
+        // Pack default values for ACCOUNT_AV_SET_DEL.
+        DCField *av_del_field = account->get_field_by_name("ACCOUNT_AV_SET_DEL");
+        packer.raw_pack_uint16(av_del_field->get_number());
+        packer.begin_pack(av_del_field);
+        packer.pack_default_value();
+        packer.end_pack();
+
+        // Pack the default value for ESTATE_ID.
+        DCField *estate_field = account->get_field_by_name("ESTATE_ID");
+        pack_uint(packer, estate_field, 0);
+
+        // Calculate the current system time.
+        auto end = chrono::system_clock::now();
+        std::time_t end_time = chrono::system_clock::to_time_t(end);
+
+        // Pack the time values for CREATED and LAST_LOGIN.
+        DCField *created_field = account->get_field_by_name("CREATED");
+        pack_string(packer, created_field, ctime(&end_time));
+        DCField *login_field = account->get_field_by_name("LAST_LOGIN");
+        pack_string(packer, login_field, ctime(&end_time));
+
+        // Get a new context for when we receive the response.
+        uint32_t context = m_context++;
+        m_token_contexts[context] = play_token;
+
+        // Create the Account object through the database server.
+        DatagramPtr dg = Datagram::create();
+        dg->add_server_header(m_database_id, m_channel, DBSERVER_CREATE_OBJECT);
+        dg->add_uint32(context);
+        dg->add_uint16(account->get_number());
+        dg->add_uint16(5);
+        dg->add_data(packer.get_string());
+        route_datagram(dg);
     }
 
-    // Client has sent "CLIENT_HELLO" and can now access anonymous uberdogs.
+    // Client is being logged in.
+    virtual void login_account(string play_token, doid_t do_id)
+    {
+        // Get the account connection channel.
+        int64_t acc_channel = static_cast<unsigned long long>(do_id) << 32;
+
+        // If somebody is already logged in, eject them.
+        DatagramPtr eject_dg = Datagram::create();
+        eject_dg->add_server_header(acc_channel, m_channel, CLIENTAGENT_EJECT);
+        eject_dg->add_uint16(100);
+        eject_dg->add_string("This account has been logged into elsewhere.");
+        route_datagram(eject_dg);
+
+        // Now we'll add ourselves to the account channel.
+        subscribe_channel(acc_channel);
+
+        // Unsubscribe from our current channel if it isn't our allocated channel.
+        if(m_channel != m_allocated_channel) {
+            unsubscribe_channel(m_channel);
+        }
+
+        // Set our sender channel to represent our account affiliation.
+        m_channel = acc_channel;
+        subscribe_channel(m_channel);
+
+        // Set our client state to established.
+        m_state = CLIENT_STATE_ESTABLISHED;
+
+        // Calculate the current system time.
+        auto end = chrono::system_clock::now();
+        std::time_t end_time = chrono::system_clock::to_time_t(end);
+
+        // Pack a new LAST_LOGIN field timestamp.
+        DCPacker packer;
+        DCClass *account = g_dcf->get_class_by_name("Account");
+        DCField *login_field = account->get_field_by_name("LAST_LOGIN");
+        pack_string(packer, login_field, ctime(&end_time));
+
+        // Update the Account object's LAST_LOGIN field.
+        DatagramPtr dg = Datagram::create();
+        dg->add_server_header(m_database_id, m_channel, DBSERVER_OBJECT_SET_FIELD);
+        dg->add_uint32(do_id);
+        dg->add_data(packer.get_string());
+        route_datagram(dg);
+
+        // Finally, send a login response to the client.
+        login_toontown_response(0, "", play_token, do_id);
+    }
+
+    // Client's Account object has been created.
+    virtual void handle_create_object_resp(DatagramIterator &dgi)
+    {
+        uint32_t context = dgi.read_uint32();
+        doid_t do_id = dgi.read_uint32();
+
+        lock_guard<recursive_mutex> lock(m_client_lock);
+
+        if(m_token_contexts.find(context) == m_token_contexts.end()) {
+            // Not a context we're aware of...
+            return;
+        }
+
+        // Grab the play token.
+        string play_token = m_token_contexts[context];
+
+        // Load our JSON file.
+        ifstream acc_read(m_database_file);
+        if(!acc_read) {
+            // Uh oh, our account bridge doesn't exist or isn't valid.
+            // We'll make a new one.
+            json acc_bridge;
+
+            // Store the play token and account ID in the new account bridge.
+            acc_bridge[play_token] = to_string(do_id);
+
+            // Close the read stream.
+            acc_read.close();
+
+            // Save the account bridge.
+            fstream acc_write;
+            acc_write.open(m_database_file, ios_base::out);
+            acc_write << setw(4) << acc_bridge << endl;
+
+            // Close the write stream.
+            acc_write.close();
+        }
+        else {
+            // Our account bridge exists, so let's read it.
+            json acc_bridge = json::parse(acc_read);
+
+            // Store the play token and account ID in the account bridge.
+            acc_bridge[play_token] = to_string(do_id);
+
+            // Close the read stream.
+            acc_read.close();
+
+            // Save the account bridge.
+            fstream acc_write;
+            acc_write.open(m_database_file, ios_base::out);
+            acc_write << setw(4) << acc_bridge << endl;
+
+            // Close the write stream.
+            acc_write.close();
+        }
+
+        // Load the account.
+        login_account(play_token, do_id);
+    }
+
+    virtual void login_toontown_response(uint8_t return_code, string return_str,
+                                         string play_token, uint32_t do_id)
+    {
+        DatagramPtr resp = Datagram::create();
+        resp->add_uint16(CLIENT_LOGIN_TOONTOWN_RESP);
+        resp->add_uint8(0);
+        resp->add_string("");
+        resp->add_uint32(do_id);
+        resp->add_string(play_token);
+        resp->add_uint8(1);
+        resp->add_string("YES");
+        resp->add_string("YES");
+        resp->add_string("NULL");
+        resp->add_uint32(time(0));
+        resp->add_uint32(clock());
+        resp->add_string("FULL");
+        resp->add_string("YES");
+        resp->add_string("-1");
+        resp->add_int32(0);
+        resp->add_string("NO_PARENT_ACCOUNT");
+        resp->add_string(play_token);
+        m_client->send_datagram(resp);
+    }
+
+    // Custom handling for internally received datagrams.
+    virtual bool handle_cluster_datagram(DatagramHandle in_dg, DatagramIterator &dgi,
+                                         channel_t sender, uint16_t msgtype)
+    {
+        switch(msgtype) {
+        case DBSERVER_CREATE_OBJECT_RESP:
+            handle_create_object_resp(dgi);
+            break;
+        default:
+            return false;
+        }
+
+        // If we broke, we were successful.
+        return true;
+    }
+
+    // Client needs to login.
     virtual void handle_pre_auth(DatagramIterator &dgi)
     {
         uint16_t msg_type = dgi.read_uint16();
@@ -441,7 +642,13 @@ class OTPClient : public Client, public NetworkHandler
             m_client->disconnect();
         }
         break;
-        case CLIENT_OBJECT_SET_FIELD:
+        case DBSERVER_CREATE_OBJECT_RESP:
+            handle_create_object_resp(dgi);
+            break;
+        case CLIENT_LOGIN_TOONTOWN:
+            handle_client_login_toontown(dgi);
+            break;
+        case CLIENT_OBJECT_UPDATE_FIELD:
             handle_client_object_update_field(dgi);
             break;
         case CLIENT_HEARTBEAT:
@@ -455,7 +662,7 @@ class OTPClient : public Client, public NetworkHandler
         }
     }
 
-    // An Uberdog or AI has declared the Client authenticated and the client
+    // We have declared the Client authenticated and the client
     // can now interact with the server cluster normally.
     virtual void handle_authenticated(DatagramIterator &dgi)
     {
@@ -469,7 +676,7 @@ class OTPClient : public Client, public NetworkHandler
             m_client->disconnect();
         }
         break;
-        case CLIENT_OBJECT_SET_FIELD:
+        case CLIENT_OBJECT_UPDATE_FIELD:
             handle_client_object_update_field(dgi);
             break;
         case CLIENT_OBJECT_LOCATION:
@@ -477,9 +684,6 @@ class OTPClient : public Client, public NetworkHandler
             break;
         case CLIENT_ADD_INTEREST:
             handle_client_add_interest(dgi, false);
-            break;
-        case CLIENT_ADD_INTEREST_MULTIPLE:
-            handle_client_add_interest(dgi, true);
             break;
         case CLIENT_REMOVE_INTEREST:
             handle_client_remove_interest(dgi);
@@ -597,13 +801,6 @@ class OTPClient : public Client, public NetworkHandler
     // When sent by the client, this represents a request to change the object's location.
     virtual void handle_client_object_location(DatagramIterator &dgi)
     {
-        // Check the client is configured to allow client-relocates
-        if(!m_relocate_owned) {
-            send_disconnect(CLIENT_DISCONNECT_FORBIDDEN_RELOCATE,
-                            "Owned object relocation is disabled by server.", true);
-            return;
-        }
-
         // Check that the object the client is trying manipulate actually exists
         // and that the client is actually allowed to change the object's location
         doid_t do_id = dgi.read_doid();
@@ -644,35 +841,35 @@ class OTPClient : public Client, public NetworkHandler
     // handle_client_add_interest occurs is called when the client adds an interest.
     virtual void handle_client_add_interest(DatagramIterator &dgi, bool multiple)
     {
-        if(m_interests_allowed == INTERESTS_DISABLED) {
-            send_disconnect(CLIENT_DISCONNECT_FORBIDDEN_INTEREST,
-                            "Client is not allowed to add interests.", true);
-            return;
+        uint16_t handle = dgi.read_uint16();
+        uint32_t context = dgi.read_uint32();
+        uint32_t parent_id = dgi.read_uint32();
+
+        set<zone_t> zones;
+        for(dgsize_t i{}; i < dgi.get_remaining(); ++i) {
+            zones.insert(dgi.read_zone());
         }
 
-        uint32_t context = dgi.read_uint32();
+        // Compile a new Datagram with the newer interest packet format.
+        DatagramPtr dg = Datagram::create();
+        dg->add_uint16(handle);
+        dg->add_doid(parent_id);
+        dg->add_uint16(zones.size());
+        for(auto zone : zones) {
+            dg->add_zone(zone);
+        }
+
+        // Get the new DatagramIterator.
+        DatagramIterator new_dgi = DatagramIterator(dg);
 
         Interest i;
-        build_interest(dgi, multiple, i);
-        if(m_interests_allowed == INTERESTS_VISIBLE && !lookup_object(i.parent)) {
-            stringstream ss;
-            ss << "Cannot add interest to parent with id " << i.parent
-               << " because parent is not visible to client.";
-            send_disconnect(CLIENT_DISCONNECT_FORBIDDEN_INTEREST, ss.str(), true);
-            return;
-        }
+        build_interest(new_dgi, true, i);
         add_interest(i, context, m_channel);
     }
 
     // handle_client_remove_interest is called when the client removes an interest.
     virtual void handle_client_remove_interest(DatagramIterator &dgi)
     {
-        if(m_interests_allowed == INTERESTS_DISABLED) {
-            send_disconnect(CLIENT_DISCONNECT_FORBIDDEN_INTEREST,
-                            "Client is not allowed to remove interests.", true);
-            return;
-        }
-
         uint32_t context = dgi.read_uint32();
         uint16_t id = dgi.read_uint16();
 
@@ -683,13 +880,6 @@ class OTPClient : public Client, public NetworkHandler
         }
 
         Interest &i = m_interests[id];
-        if(m_interests_allowed == INTERESTS_VISIBLE && !lookup_object(i.parent)) {
-            stringstream ss;
-            ss << "Cannot remove interest for parent with id " << i.parent
-               << " because parent is not visible to client.";
-            send_disconnect(CLIENT_DISCONNECT_FORBIDDEN_INTEREST, ss.str(), true);
-            return;
-        }
         remove_interest(i, context);
     }
 
@@ -720,4 +910,4 @@ class OTPClient : public Client, public NetworkHandler
 
 };
 
-static ClientType<OTPClient> otp_client_fact("libotp");
+static ClientType<DisneyClient> disney_client_fact("libdisney");

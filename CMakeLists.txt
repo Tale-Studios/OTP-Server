@@ -252,6 +252,7 @@ endif()
 set(BUILD_CLIENTAGENT ON CACHE BOOL "If on, Client Agent will be built into binary")
 if(BUILD_CLIENTAGENT)
     set(CLIENTAGENT_FILES
+        src/json/json.hpp
         src/clientagent/Client.h
         src/clientagent/Client.cpp
         src/clientagent/ClientAgent.h
@@ -260,6 +261,7 @@ if(BUILD_CLIENTAGENT)
         src/clientagent/ClientFactory.cpp
         src/clientagent/ClientFactory.h
         src/clientagent/OTPClient.cpp
+        src/clientagent/DisneyClient.cpp
     )
     add_test(clientagent "${PYTHON2_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/test/test_clientagent.py")
     add_test(validate_config_clientagent "${PYTHON2_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/test/test_config_clientagent.py")
@@ -379,7 +381,6 @@ endif()
 #endforeach(sourcefile)
 #source_group("Header Files" FILES ${OTPD_HEADERS})
 
-#add_subdirectory(src/dclass)
 add_library(dclass
     src/dclass/p3dcparser_composite1.cpp
     src/dclass/p3dcparser_composite2.cpp
