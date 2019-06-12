@@ -267,10 +267,10 @@ class DisneyClient : public Client, public NetworkHandler
                                    DatagramIterator &dgi, bool other)
     {
         DatagramPtr resp = Datagram::create();
-        resp->add_uint16(other ? CLIENT_ENTER_OBJECT_REQUIRED_OTHER : CLIENT_ENTER_OBJECT_REQUIRED);
-        resp->add_doid(do_id);
+        resp->add_uint16(other ? CLIENT_CREATE_OBJECT_REQUIRED_OTHER : CLIENT_CREATE_OBJECT_REQUIRED);
         resp->add_location(parent_id, zone_id);
         resp->add_uint16(dc_id);
+        resp->add_doid(do_id);
         resp->add_data(dgi.read_remainder());
         m_client->send_datagram(resp);
     }
@@ -282,10 +282,10 @@ class DisneyClient : public Client, public NetworkHandler
                                       DatagramIterator &dgi)
     {
         DatagramPtr resp = Datagram::create();
-        resp->add_uint16(CLIENT_ENTER_OBJECT_REQUIRED_OTHER_OWNER);
+        resp->add_uint16(CLIENT_CREATE_OBJECT_REQUIRED_OTHER_OWNER);
+        resp->add_uint16(dc_id);
         resp->add_doid(do_id);
         resp->add_location(parent_id, zone_id);
-        resp->add_uint16(dc_id);
         resp->add_data(dgi.read_remainder());
         m_client->send_datagram(resp);
     }
@@ -294,7 +294,7 @@ class DisneyClient : public Client, public NetworkHandler
     virtual void handle_set_field(doid_t do_id, uint16_t field_id, DatagramIterator &dgi)
     {
         DatagramPtr resp = Datagram::create();
-        resp->add_uint16(CLIENT_OBJECT_SET_FIELD);
+        resp->add_uint16(CLIENT_OBJECT_UPDATE_FIELD);
         resp->add_doid(do_id);
         resp->add_uint16(field_id);
         resp->add_data(dgi.read_remainder());
@@ -359,7 +359,7 @@ class DisneyClient : public Client, public NetworkHandler
         m_client->send_datagram(resp);
     }
 
-    // Method for packing field data.
+    // Method for packing a uint into a field.
     virtual void pack_uint(DCPacker &packer, DCField *field, unsigned int value)
     {
         packer.raw_pack_uint16(field->get_number());
@@ -368,6 +368,7 @@ class DisneyClient : public Client, public NetworkHandler
         packer.end_pack();
     }
 
+    // Method for packing a string into a field.
     virtual void pack_string(DCPacker &packer, DCField *field, const string value)
     {
         packer.raw_pack_uint16(field->get_number());
@@ -688,6 +689,9 @@ class DisneyClient : public Client, public NetworkHandler
         case CLIENT_REMOVE_INTEREST:
             handle_client_remove_interest(dgi);
             break;
+        case CLIENT_GET_AVATARS:
+            handle_client_get_avatars(dgi);
+            break;
         case CLIENT_HEARTBEAT:
             handle_client_heartbeat();
             break;
@@ -699,6 +703,11 @@ class DisneyClient : public Client, public NetworkHandler
         }
     }
 
+    // handle_client_get_avatars occurs when a client sends a CLIENT_GET_AVATARS.
+    virtual void handle_client_get_avatars(DatagramIterator &dgi)
+    {
+    }
+
     // handle_client_heartbeat should ensure this client does not get reset for the current interval.
     // Handler for CLIENT_HEARTBEAT message
     virtual void handle_client_heartbeat()
@@ -708,7 +717,7 @@ class DisneyClient : public Client, public NetworkHandler
         }
     }
 
-    // handle_client_object_update_field occurs when a client sends an OBJECT_SET_FIELD
+    // handle_client_object_update_field occurs when a client sends an OBJECT_UPDATE_FIELD
     virtual void handle_client_object_update_field(DatagramIterator &dgi)
     {
         doid_t do_id = dgi.read_doid();
