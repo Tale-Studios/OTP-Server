@@ -300,10 +300,9 @@ class DisneyClient : public Client, public NetworkHandler
                                       DatagramIterator &dgi)
     {
         DatagramPtr resp = Datagram::create();
-        resp->add_uint16(CLIENT_CREATE_OBJECT_REQUIRED_OTHER_OWNER);
-        resp->add_uint16(dc_id);
-        resp->add_doid(do_id);
-        resp->add_location(parent_id, zone_id);
+        resp->add_uint16(CLIENT_GET_AVATAR_DETAILS_RESP);
+        resp->add_uint32(do_id);
+        resp->add_uint8(0);
         resp->add_data(dgi.read_remainder());
         m_client->send_datagram(resp);
     }
@@ -879,6 +878,11 @@ class DisneyClient : public Client, public NetworkHandler
         case CLIENT_OBJECT_LOCATION:
             handle_client_object_location(dgi);
             break;
+        case CLIENT_SET_AVATAR:
+            handle_client_set_avatar(dgi);
+            break;
+        case CLIENT_GET_FRIEND_LIST:
+            break;
         case CLIENT_ADD_INTEREST:
             handle_client_add_interest(dgi, false);
             break;
@@ -919,6 +923,36 @@ class DisneyClient : public Client, public NetworkHandler
         resp->add_uint8(0);
         resp->add_uint16(0);
         m_client->send_datagram(resp);
+    }
+
+    // handle_client_set_avatar occurs when a client sends a CLIENT_SET_AVATAR.
+    virtual void handle_client_set_avatar(DatagramIterator &dgi)
+    {
+        // Get the Avatar ID.
+        uint32_t av_id = dgi.read_uint32();
+
+        // Activate the Avatar on the DBSS.
+        DatagramPtr dg = Datagram::create();
+        dg->add_server_header(av_id, m_channel, DBSS_OBJECT_ACTIVATE_WITH_DEFAULTS);
+        dg->add_uint32(av_id);
+        dg->add_uint32(0);
+        dg->add_uint32(0);
+        route_datagram(dg);
+
+        DatagramPtr ldg = Datagram::create();
+        ldg->add_server_header(av_id, m_channel, STATESERVER_OBJECT_SET_LOCATION);
+        ldg->add_uint32(0);
+        ldg->add_uint32(0);
+        route_datagram(ldg);
+
+        // Add the Avatar as a session object.
+        m_session_objects.insert(av_id);
+
+        // Set ourselves as the owner of the Avatar.
+        DatagramPtr own_dg = Datagram::create();
+        own_dg->add_server_header(av_id, m_channel, STATESERVER_OBJECT_SET_OWNER);
+        own_dg->add_uint64(m_channel);
+        route_datagram(own_dg);
     }
 
     // handle_client_set_name_pattern occurs when a client sends a CLIENT_SET_NAME_PATTERN.
@@ -1052,6 +1086,8 @@ class DisneyClient : public Client, public NetworkHandler
         DCPacker av_packer;
 
         // Get the Toon head color and animal type from the DNA string.
+        uint8_t head_index = 0;
+        uint8_t head_color = 0;
         try {
             DatagramPtr dna_dg = Datagram::create(dna_string);
             DatagramIterator dna_dgi = DatagramIterator(dna_dg);
@@ -1060,7 +1096,7 @@ class DisneyClient : public Client, public NetworkHandler
             dna_dgi.skip(sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint8_t) +
                          sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint8_t) +
                          sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint8_t) +
-                         sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint8_t);
+                         sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint8_t));
             uint8_t head_color = dna_dgi.read_uint8();
         } catch(const DatagramIteratorEOF&) {
             // Our net string is not valid. Disconnect.
@@ -1234,7 +1270,7 @@ class DisneyClient : public Client, public NetworkHandler
         pack_int(av_packer, avatar->get_field_by_name("setMoney"), 0);
         pack_int(av_packer, avatar->get_field_by_name("setMaxHp"), 15);
         pack_int(av_packer, avatar->get_field_by_name("setHp"), 15);
-        pack_string(av_packer, avatar->get_field_by_name("setExperience"), "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00");
+        pack_string(av_packer, avatar->get_field_by_name("setExperience"), "\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00");
         pack_uint(av_packer, avatar->get_field_by_name("setMaxCarry"), 20);
         av_packer.raw_pack_uint16(avatar->get_field_by_name("setTrackAccess")->get_number());
         av_packer.begin_pack(avatar->get_field_by_name("setTrackAccess"));
@@ -1267,7 +1303,7 @@ class DisneyClient : public Client, public NetworkHandler
         av_packer.pop();
         av_packer.pop();
         av_packer.end_pack();
-        pack_string(av_packer, avatar->get_field_by_name("setInventory"), "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00");
+        pack_string(av_packer, avatar->get_field_by_name("setInventory"), "\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x01\\x00\\x00\\x00\\x00\\x00\\x00\\x01\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00");
         pack_uint(av_packer, avatar->get_field_by_name("setMaxNPCFriends"), 16);
         av_packer.raw_pack_uint16(avatar->get_field_by_name("setNPCFriendsDict")->get_number());
         av_packer.begin_pack(avatar->get_field_by_name("setNPCFriendsDict"));
@@ -1396,11 +1432,7 @@ class DisneyClient : public Client, public NetworkHandler
         av_packer.end_pack();
         av_packer.raw_pack_uint16(avatar->get_field_by_name("setCatalog")->get_number());
         av_packer.begin_pack(avatar->get_field_by_name("setCatalog"));
-        av_packer.push();
-        av_packer.pack_string("");
-        av_packer.pack_string("");
-        av_packer.pack_string("");
-        av_packer.pop();
+        av_packer.pack_default_value();
         av_packer.end_pack();
         pack_string(av_packer, avatar->get_field_by_name("setMailboxContents"), "");
         pack_string(av_packer, avatar->get_field_by_name("setDeliverySchedule"), "");
