@@ -390,6 +390,25 @@ class DatagramIterator
         return m_dg->size() - m_offset;
     }
 
+    // get_remaining_bytes returns a string containing anything remaining in the message.
+    string get_remaining_bytes() const
+    {
+        const char *ptr = (const char *)m_dg->get_data();
+        return string(ptr + m_offset, m_dg->size() - m_offset);
+    }
+
+    // get_fixed_string returns an extracted fixed-length string in the message.
+    string get_fixed_string(dgsize_t size)
+    {
+        const char *ptr = (const char *)m_dg->get_data();
+        string s(ptr + m_offset, size);
+
+        m_offset += size;
+
+        dgsize_t zero_byte = s.find('\0');
+        return s.substr(0, zero_byte);
+    }
+
     // seek sets the current message offset in std::vector<uint8_t>
     void seek(dgsize_t to)
     {
