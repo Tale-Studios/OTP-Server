@@ -72,9 +72,9 @@ class DistributedObject : public MDParticipantInterface
     void handle_location_change(doid_t new_parent, zone_t new_zone, channel_t sender);
     void handle_ai_change(channel_t new_ai, channel_t sender, bool channel_is_explicit);
 
-    void begin_delete();
-    void finish_delete(bool notify_parent = false);
-    void delete_children();
+    void begin_delete(bool ai_deletion = false);
+    void finish_delete(bool notify_parent = false, bool ai_deletion = false);
+    void delete_children(bool ai_deletion = false);
 
     void wake_children(); // ask all children for their locations
 

@@ -298,7 +298,7 @@ void DistributedObject::handle_ai_change(channel_t new_ai, channel_t sender,
 
 }
 
-void DistributedObject::begin_delete()
+void DistributedObject::begin_delete(bool ai_deletion)
 {
     if(m_parent_id) {
         // Leave parent on explicit delete ram
@@ -326,17 +326,19 @@ void DistributedObject::begin_delete()
             // our deletion.
             DatagramPtr dg = Datagram::create(m_parent_id, m_do_id, STATESERVER_OBJECT_DELETE_RAM);
             dg->add_doid(m_do_id);
+            dg->add_bool(ai_deletion);
             route_datagram(dg);
+
         }
-        finish_delete();
+        finish_delete(false, ai_deletion);
         return;
     }
 
     m_deletion_process = true;
-    delete_children();
+    delete_children(ai_deletion);
 }
 
-void DistributedObject::finish_delete(bool notify_parent)
+void DistributedObject::finish_delete(bool notify_parent, bool ai_deletion)
 {
     unordered_set<channel_t> targets;
     if(m_parent_id) {
@@ -344,6 +346,7 @@ void DistributedObject::finish_delete(bool notify_parent)
             // We do have a parent and need to acknowledge our own deletion.
             DatagramPtr dg = Datagram::create(m_parent_id, m_do_id, STATESERVER_OBJECT_DELETE_RAM);
             dg->add_doid(m_do_id);
+            dg->add_bool(ai_deletion);
             route_datagram(dg);
         }
         targets.insert(location_as_channel(m_parent_id, m_zone_id));
@@ -357,6 +360,7 @@ void DistributedObject::finish_delete(bool notify_parent)
 
     DatagramPtr dg = Datagram::create(targets, m_do_id, STATESERVER_OBJECT_DELETE_RAM);
     dg->add_doid(m_do_id);
+    dg->add_bool(ai_deletion);
     route_datagram(dg);
 
     m_stateserver->m_objs.erase(m_do_id);
@@ -365,24 +369,13 @@ void DistributedObject::finish_delete(bool notify_parent)
     terminate();
 }
 
-void DistributedObject::delete_children()
+void DistributedObject::delete_children(bool ai_deletion)
 {
-    // Collect a map of DC ID -> DO ID.
-    map<uint16_t, set<doid_t>> do_ids;
-    for(auto kv : m_zone_objects) {
-        for(auto it : kv.second) {
-            do_ids[m_stateserver->get_dcid(it)].insert(it);
-        }
-    }
-
-    // Iterate over the children in DC ID order and begin their deletion process.
-    for(auto dc_it = do_ids.begin(); dc_it != do_ids.end(); ++dc_it) {
-        for(const auto& it : dc_it->second) {
-            DatagramPtr dg = Datagram::create(it, m_do_id,
-                                              STATESERVER_OBJECT_DELETE_CHILDREN);
-            route_datagram(dg);
-        }
-    }
+    // Delete each child.
+    DatagramPtr dg = Datagram::create(parent_to_children(m_do_id), m_do_id,
+                                      STATESERVER_OBJECT_DELETE_CHILDREN);
+    dg->add_bool(ai_deletion);
+    route_datagram(dg);
 }
 
 void DistributedObject::wake_children()
@@ -513,7 +506,7 @@ void DistributedObject::handle_datagram(DatagramHandle, DatagramIterator &dgi)
         m_log->warning() << "AI channel " << m_ai_channel << " is now being deleted.\n";
 
         // Begin the deletion process.
-        begin_delete();
+        begin_delete(true);
 
         break;
     }
@@ -534,12 +527,12 @@ void DistributedObject::handle_datagram(DatagramHandle, DatagramIterator &dgi)
         }
 
         // Begin the deletion process.
-        begin_delete();
+        begin_delete(dgi.read_bool());
 
         break;
     }
     case STATESERVER_OBJECT_DELETE_CHILDREN: {
-        begin_delete();
+        begin_delete(dgi.read_bool());
         break;
     }
     case STATESERVER_OBJECT_SET_FIELD: {

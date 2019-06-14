@@ -557,8 +557,17 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
     break;
     case STATESERVER_OBJECT_DELETE_RAM: {
         doid_t do_id = dgi.read_doid();
+        bool ai_deletion = dgi.read_bool();
 
         m_log->trace() << "Received DeleteRam for object with id " << do_id << "\n.";
+
+        if(ai_deletion) {
+            // If the AI server we're on has crashed, then we need to fall over and die.
+            stringstream ss;
+            ss << "The AI server has unexpectedly disconnected.";
+            send_disconnect(CLIENT_DISCONNECT_AI_DISCONNECT, ss.str());
+            return;
+        }
 
         if(!lookup_object(do_id)) {
             if(try_queue_pending(do_id, in_dg)) {
