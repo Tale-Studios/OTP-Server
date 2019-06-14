@@ -798,7 +798,9 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
     }
     break;
     default:
-        m_log->error() << "Recv'd unknown server msgtype " << msgtype << "\n.";
+        if(!handle_cluster_datagram(in_dg, dgi, sender, msgtype)) {
+            m_log->error() << "Recv'd unknown server msgtype " << msgtype << "\n.";
+        }
     }
 }
 

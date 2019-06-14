@@ -247,6 +247,13 @@ class OTPClient : public Client, public NetworkHandler
         m_client->disconnect();
     }
 
+    // handle_cluster_datagram is not used by us.
+    virtual bool handle_cluster_datagram(DatagramHandle in_dg, DatagramIterator &dgi,
+                                         channel_t sender, uint16_t msgtype)
+    {
+        return false;
+    }
+
     // handle_add_interest should inform the client of an interest added by the server.
     virtual void handle_add_interest(const Interest& i, uint32_t context)
     {
