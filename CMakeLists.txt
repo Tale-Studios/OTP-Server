@@ -250,19 +250,33 @@ if(BUILD_EVENTLOGGER)
 endif()
 
 set(BUILD_CLIENTAGENT ON CACHE BOOL "If on, Client Agent will be built into binary")
+set(BUILD_DISNEYCLIENT OFF CACHE BOOL "If on, DisneyClient will be built into binary as an option")
 if(BUILD_CLIENTAGENT)
-    set(CLIENTAGENT_FILES
-        src/json/json.hpp
-        src/clientagent/Client.h
-        src/clientagent/Client.cpp
-        src/clientagent/ClientAgent.h
-        src/clientagent/ClientAgent.cpp
-        src/clientagent/ClientMessages.h
-        src/clientagent/ClientFactory.cpp
-        src/clientagent/ClientFactory.h
-        src/clientagent/OTPClient.cpp
-        src/clientagent/DisneyClient.cpp
-    )
+    if(BUILD_DISNEYCLIENT)
+        set(CLIENTAGENT_FILES
+            src/json/json.hpp
+            src/clientagent/Client.h
+            src/clientagent/Client.cpp
+            src/clientagent/ClientAgent.h
+            src/clientagent/ClientAgent.cpp
+            src/clientagent/ClientMessages.h
+            src/clientagent/ClientFactory.cpp
+            src/clientagent/ClientFactory.h
+            src/clientagent/OTPClient.cpp
+            src/clientagent/DisneyClient.cpp
+        )
+    else()
+        set(CLIENTAGENT_FILES
+            src/clientagent/Client.h
+            src/clientagent/Client.cpp
+            src/clientagent/ClientAgent.h
+            src/clientagent/ClientAgent.cpp
+            src/clientagent/ClientMessages.h
+            src/clientagent/ClientFactory.cpp
+            src/clientagent/ClientFactory.h
+            src/clientagent/OTPClient.cpp
+        )
+    endif()
     add_test(clientagent "${PYTHON2_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/test/test_clientagent.py")
     add_test(validate_config_clientagent "${PYTHON2_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/test/test_config_clientagent.py")
     set(PYTHON_TESTS ${PYTHON_TESTS} clientagent validate_config_clientagent)
