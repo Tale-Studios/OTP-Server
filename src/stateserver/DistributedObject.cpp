@@ -526,8 +526,14 @@ void DistributedObject::handle_datagram(DatagramHandle, DatagramIterator &dgi)
             break;
         }
 
-        // Begin the deletion process.
-        begin_delete(dgi.read_bool());
+        // If we received more data, assume we received a boolean.
+        if(dgi.get_remaining() > 0) {
+            // Begin the deletion process.
+            begin_delete(dgi.read_bool());
+        } else {
+            // Begin the deletion process.
+            begin_delete();
+        }
 
         break;
     }
