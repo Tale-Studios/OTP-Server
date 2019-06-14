@@ -60,6 +60,7 @@ void Client::annihilate()
         m_log->debug() << "Client exited, deleting owned object with id " << do_id << ".\n";
         DatagramPtr dg = Datagram::create(do_id, m_channel, STATESERVER_OBJECT_DELETE_RAM);
         dg->add_doid(do_id);
+        dg->add_bool(0);
         route_datagram(dg);
     }
 
