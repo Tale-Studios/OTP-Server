@@ -14,6 +14,7 @@ using namespace std;
 
 
 static ConfigGroup otpclient_config("libotp", ca_client_config);
+static ConfigVariable<uint32_t> extagent_id_config("extagent_id", 0, otpclient_config);
 static ConfigVariable<bool> relocate_owned("relocate", false, otpclient_config);
 static ConfigVariable<string> interest_permissions("add_interest", "visible", otpclient_config);
 static BooleanValueConstraint relocate_is_boolean(relocate_owned);
@@ -46,6 +47,7 @@ class OTPClient : public Client, public NetworkHandler
   private:
     std::shared_ptr<NetworkClient> m_client;
     ConfigNode m_config;
+    uint32_t m_extagent_id;
     bool m_clean_disconnect;
     bool m_relocate_owned;
     bool m_send_hash;
@@ -61,7 +63,8 @@ class OTPClient : public Client, public NetworkHandler
                  const uvw::Addr &remote, const uvw::Addr &local, const bool haproxy_mode) :
         Client(config, client_agent), m_client(std::make_shared<NetworkClient>(this)),
         m_config(config),
-        m_clean_disconnect(false), m_relocate_owned(relocate_owned.get_rval(config)),
+        m_extagent_id(extagent_id_config.get_rval(config)), m_clean_disconnect(false),
+        m_relocate_owned(relocate_owned.get_rval(config)),
         m_send_hash(send_hash_to_client.get_rval(config)),
         m_send_version(send_version_to_client.get_rval(config)),
         m_heartbeat_timeout(heartbeat_timeout_config.get_rval(config))
@@ -160,6 +163,16 @@ class OTPClient : public Client, public NetworkHandler
     {
         lock_guard<recursive_mutex> lock(m_client_lock);
         DatagramIterator dgi(dg);
+        // If we have an extension client agent, offload this datagram to it instead.
+        if(m_extagent_id > 0) {
+            // We have an extension CA for delegating this message.
+            DatagramPtr ext_dg = Datagram::create();
+            ext_dg->add_server_header(m_extagent_id, m_channel, CLIENTAGENT_EXTAGENT_MESSAGE);
+            ext_dg->add_uint64(m_channel);
+            ext_dg->add_data(dg);
+            route_datagram(ext_dg);
+            return;
+        }
         try {
             switch(m_state) {
             // Client has just connected and should only send "CLIENT_HELLO".
@@ -247,10 +260,19 @@ class OTPClient : public Client, public NetworkHandler
         m_client->disconnect();
     }
 
-    // handle_cluster_datagram is not used by us.
+    // handle_cluster_datagram is only used by us for extension client agents.
     virtual bool handle_cluster_datagram(DatagramHandle in_dg, DatagramIterator &dgi,
                                          channel_t sender, uint16_t msgtype)
     {
+        // If we have an ext agent, go ahead and process it.
+        if(m_extagent_id > 0) {
+            dgi.seek_payload();
+            dgi.skip(sizeof(channel_t)); // skip sender
+            handle_authenticated(dgi);
+            return true;
+        }
+
+        // Otherwise, this is unknown to us.
         return false;
     }
 
