@@ -151,7 +151,7 @@ class OTPClient : public Client, public NetworkHandler
             resp->add_uint16(CLIENT_EJECT);
             resp->add_uint16(reason);
             resp->add_string(error_string);
-            m_client->send_datagram(resp);
+            forward_datagram(resp);
 
             m_clean_disconnect = true;
             m_client->disconnect();
@@ -246,9 +246,20 @@ class OTPClient : public Client, public NetworkHandler
 
     // forward_datagram should foward the datagram to the client, or where appopriate parse
     // the packet and send the appropriate equivalent data.
-    // Handler for CLIENTAGENT_SEND_DATAGRAM.
-    virtual void forward_datagram(DatagramHandle dg)
+    // Also a handler for CLIENTAGENT_SEND_DATAGRAM.
+    virtual void forward_datagram(DatagramHandle dg, bool send_datagram)
     {
+        // If we have an ext agent (and this isn't from CLIENTAGENT_SEND_DATAGRAM),
+        // send it to the ext agent channel instead.
+        if(m_extagent_id > 0 && !send_datagram) {
+            DatagramPtr ext_dg = Datagram::create();
+            ext_dg->add_server_header(m_extagent_id, m_channel, CLIENTAGENT_EXTAGENT_RESPONSE);
+            ext_dg->add_uint64(m_channel);
+            ext_dg->add_data(dg);
+            route_datagram(ext_dg);
+        }
+
+        // Send the datagram straight to the client.
         m_client->send_datagram(dg);
     }
 
@@ -292,7 +303,7 @@ class OTPClient : public Client, public NetworkHandler
         for(auto it = i.zones.begin(); it != i.zones.end(); ++it) {
             resp->add_zone(*it);
         }
-        m_client->send_datagram(resp);
+        forward_datagram(resp);
     }
 
     // handle_remove_interest should inform the client an interest was removed by the server.
@@ -302,7 +313,7 @@ class OTPClient : public Client, public NetworkHandler
         resp->add_uint16(CLIENT_REMOVE_INTEREST);
         resp->add_uint32(context);
         resp->add_uint16(interest_id);
-        m_client->send_datagram(resp);
+        forward_datagram(resp);
     }
 
     // handle_add_object should inform the client of a new object. The datagram iterator
@@ -317,7 +328,7 @@ class OTPClient : public Client, public NetworkHandler
         resp->add_location(parent_id, zone_id);
         resp->add_uint16(dc_id);
         resp->add_data(dgi.read_remainder());
-        m_client->send_datagram(resp);
+        forward_datagram(resp);
     }
 
     // handle_add_ownership should inform the client it has control of a new object. The datagram
@@ -332,7 +343,7 @@ class OTPClient : public Client, public NetworkHandler
         resp->add_location(parent_id, zone_id);
         resp->add_uint16(dc_id);
         resp->add_data(dgi.read_remainder());
-        m_client->send_datagram(resp);
+        forward_datagram(resp);
     }
 
     // handle_set_field should inform the client that the field has been updated.
@@ -343,7 +354,7 @@ class OTPClient : public Client, public NetworkHandler
         resp->add_doid(do_id);
         resp->add_uint16(field_id);
         resp->add_data(dgi.read_remainder());
-        m_client->send_datagram(resp);
+        forward_datagram(resp);
     }
 
     // handle_set_fields should inform the client that a group of fields has been updated.
@@ -354,7 +365,7 @@ class OTPClient : public Client, public NetworkHandler
         resp->add_doid(do_id);
         resp->add_uint16(num_fields);
         resp->add_data(dgi.read_remainder());
-        m_client->send_datagram(resp);
+        forward_datagram(resp);
     }
 
     // handle_change_location should inform the client that the objects location has changed.
@@ -364,7 +375,7 @@ class OTPClient : public Client, public NetworkHandler
         resp->add_uint16(CLIENT_OBJECT_LOCATION);
         resp->add_doid(do_id);
         resp->add_location(new_parent, new_zone);
-        m_client->send_datagram(resp);
+        forward_datagram(resp);
     }
 
     // handle_remove_object should send a mesage to remove the object from the connected client.
@@ -380,7 +391,7 @@ class OTPClient : public Client, public NetworkHandler
             resp->add_uint16(CLIENT_OBJECT_DISABLE);
         }
         resp->add_doid(do_id);
-        m_client->send_datagram(resp);
+        forward_datagram(resp);
     }
 
     // handle_remove_ownership should notify the client it no longer has control of the object.
@@ -390,7 +401,7 @@ class OTPClient : public Client, public NetworkHandler
         DatagramPtr resp = Datagram::create();
         resp->add_uint16(CLIENT_OBJECT_DISABLE_OWNER);
         resp->add_doid(do_id);
-        m_client->send_datagram(resp);
+        forward_datagram(resp);
     }
 
     // handle_interest_done is called when all of the objects from an opened interest have been
@@ -401,7 +412,7 @@ class OTPClient : public Client, public NetworkHandler
         resp->add_uint16(CLIENT_DONE_INTEREST_RESP);
         resp->add_uint32(context);
         resp->add_uint16(interest_id);
-        m_client->send_datagram(resp);
+        forward_datagram(resp);
     }
 
     // Client has just connected and should only send "CLIENT_HELLO"
@@ -445,7 +456,7 @@ class OTPClient : public Client, public NetworkHandler
 
         DatagramPtr resp = Datagram::create();
         resp->add_uint16(CLIENT_HELLO_RESP);
-        m_client->send_datagram(resp);
+        forward_datagram(resp);
 
         m_state = CLIENT_STATE_ANONYMOUS;
     }

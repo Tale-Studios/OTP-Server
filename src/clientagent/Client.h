@@ -193,8 +193,8 @@ class Client : public MDParticipantInterface
 
     // forward_datagram should foward the datagram to the client, or where appopriate parse
     // the packet and send the appropriate equivalent data.
-    // Handler for CLIENTAGENT_SEND_DATAGRAM.
-    virtual void forward_datagram(DatagramHandle dg) = 0;
+    // Also a handler for CLIENTAGENT_SEND_DATAGRAM.
+    virtual void forward_datagram(DatagramHandle dg, bool send_datagram = false) = 0;
 
     // handle_drop should immediately disconnect the client without sending any more data.
     // Handler for CLIENTAGENT_DROP.
