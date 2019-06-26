@@ -59,8 +59,7 @@ DistributedObject::DistributedObject(StateServer *stateserver, doid_t do_id, doi
 
 DistributedObject::DistributedObject(StateServer *stateserver, channel_t sender, doid_t do_id,
                                      doid_t parent_id, zone_t zone_id, DCClass *dclass,
-                                     std::unordered_map<DCField*, std::vector<uint8_t> > required,
-                                     std::map<DCField*, std::vector<uint8_t> > ram) :
+                                     UnorderedFieldValues& required, FieldValues& ram) :
     m_stateserver(stateserver), m_do_id(do_id), m_parent_id(INVALID_DO_ID), m_zone_id(0),
     m_dclass(dclass), m_ai_channel(INVALID_CHANNEL), m_owner_channel(INVALID_CHANNEL),
     m_ai_explicitly_set(false), m_next_context(0)

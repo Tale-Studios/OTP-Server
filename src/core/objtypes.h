@@ -17,3 +17,4 @@ inline bool FieldPtrComp::operator()(DCField* lhs, DCField* rhs) const
 // Convenience typedefs
 typedef std::set<DCField*, FieldPtrComp> FieldSet;
 typedef std::map<DCField*, std::vector<uint8_t>, FieldPtrComp> FieldValues;
+typedef std::unordered_map<DCField*, std::vector<uint8_t> > UnorderedFieldValues;

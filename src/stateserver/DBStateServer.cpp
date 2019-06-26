@@ -234,7 +234,7 @@ void DBStateServer::handle_set_fields(DatagramIterator &dgi)
 
     uint16_t field_count = dgi.read_uint16();
 
-    std::unordered_map<DCField*, std::vector<uint8_t> > db_fields;
+    FieldValues db_fields;
     for(uint16_t i = 0; i < field_count; ++i) {
         uint16_t field_id = dgi.read_uint16();
         DCField* field = g_dcf->get_field_by_index(field_id);
@@ -530,8 +530,8 @@ void DBStateServer::handle_get_all_resp(DatagramIterator& dgi)
     DCClass* r_class = g_dcf->get_class(dc_id);
 
     // Get fields from database
-    std::unordered_map<DCField*, std::vector<uint8_t> > required_fields;
-    std::map<DCField*, std::vector<uint8_t> > ram_fields;
+    UnorderedFieldValues required_fields;
+    FieldValues ram_fields;
     if(!unpack_db_fields(dgi, r_class, required_fields, ram_fields)) {
         m_log->error() << "Error while unpacking fields from database." << std::endl;
         return;
@@ -587,8 +587,7 @@ bool DBStateServer::is_activated_object(doid_t do_id)
 
 
 bool unpack_db_fields(DatagramIterator &dgi, DCClass* dc_class,
-                      std::unordered_map<DCField*, std::vector<uint8_t> > &required,
-                      std::map<DCField*, std::vector<uint8_t> > &ram)
+                      UnorderedFieldValues &required, FieldValues &ram)
 {
     // Unload ram and required fields from database resp
     uint16_t db_field_count = dgi.read_uint16();

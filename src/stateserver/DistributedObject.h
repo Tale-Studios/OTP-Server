@@ -1,5 +1,6 @@
 #pragma once
 #include "StateServer.h"
+#include "core/objtypes.h"
 
 class DistributedObject : public MDParticipantInterface
 {
@@ -47,8 +48,8 @@ class DistributedObject : public MDParticipantInterface
     doid_t m_parent_id;
     zone_t m_zone_id;
     DCClass *m_dclass;
-    std::unordered_map<DCField*, std::vector<uint8_t> > m_required_fields;
-    std::map<DCField*, std::vector<uint8_t> > m_ram_fields;
+    UnorderedFieldValues m_required_fields;
+    FieldValues m_ram_fields;
     channel_t m_ai_channel;
     channel_t m_owner_channel;
     bool m_ai_explicitly_set;
