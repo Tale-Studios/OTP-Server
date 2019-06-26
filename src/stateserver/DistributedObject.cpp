@@ -118,7 +118,7 @@ void DistributedObject::append_required_data(DatagramPtr dg, bool client_only)
 void DistributedObject::append_other_data(DatagramPtr dg, bool client_only)
 {
     if(client_only) {
-        std::list<DCField*> broadcast_fields;
+        vector<DCField*> broadcast_fields;
         for(auto it = m_ram_fields.begin(); it != m_ram_fields.end(); ++it) {
             if(it->first->is_broadcast() || it->first->is_clrecv()) {
                 broadcast_fields.push_back(it->first);
