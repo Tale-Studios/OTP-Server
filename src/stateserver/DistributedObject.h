@@ -1,4 +1,5 @@
 #pragma once
+
 #include "StateServer.h"
 #include "core/objtypes.h"
 
@@ -11,8 +12,7 @@ class DistributedObject : public MDParticipantInterface
                       DCClass *dclass, DatagramIterator &dgi, bool has_other);
     DistributedObject(StateServer *stateserver, channel_t sender, doid_t do_id,
                       doid_t parent_id, zone_t zone_id, DCClass *dclass,
-                      std::unordered_map<DCField*, std::vector<uint8_t> > req_fields,
-                      std::map<DCField*, std::vector<uint8_t> > ram_fields);
+                      UnorderedFieldValues& req_fields, FieldValues& ram_fields);
     ~DistributedObject();
 
     virtual void handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi);

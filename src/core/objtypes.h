@@ -1,5 +1,8 @@
+#pragma once
+
 #include <set>
 #include <map>
+#include <unordered_map>
 #include "dclass/dcClass.h"
 #include "dclass/dcField.h"
 
