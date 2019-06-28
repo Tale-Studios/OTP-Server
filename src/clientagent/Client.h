@@ -96,11 +96,12 @@ class Client : public MDParticipantInterface
     void handle_datagram(DatagramHandle dg, DatagramIterator &dgi);
 
   protected:
-    std::recursive_mutex m_client_lock;     // The lock guarding the client.
+    std::recursive_mutex m_client_lock;     // The lock guarding the client
     ClientAgent* m_client_agent;            // The ClientAgent handling this client
     ClientState m_state = CLIENT_STATE_NEW; // Current state of the Client state machine
     channel_t m_channel = 0;                // Current channel client is listening on
     channel_t m_allocated_channel = 0;      // Channel assigned to client at creation time
+    bool m_accept_messages = true;          // Whether we want to accept messages (from anywhere) or not
     uint32_t m_next_context = 1;
 
     // m_seen_objects is a list of all objects visible through interests.

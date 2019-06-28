@@ -162,7 +162,16 @@ class OTPClient : public Client, public NetworkHandler
     virtual void receive_datagram(DatagramHandle dg)
     {
         lock_guard<recursive_mutex> lock(m_client_lock);
+
+        // If we're no longer accepting messages, return and hope
+        // that we're about to be terminated.
+        if(!m_accept_messages) {
+            return;
+        }
+
+        // Get the DatagramIterator.
         DatagramIterator dgi(dg);
+
         // If we have an extension client agent, offload this datagram to it instead.
         if(m_extagent_id > 0) {
             // We have an extension CA for delegating this message.

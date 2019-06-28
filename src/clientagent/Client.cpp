@@ -348,16 +348,25 @@ void Client::send_disconnect(uint16_t reason, const string &error_string, bool s
 void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
 {
     lock_guard<recursive_mutex> lock(m_client_lock);
-    if(is_terminated()) {
+
+    // If we're terminated, or we just aren't accepting messages,
+    // just return.
+    if(is_terminated() || !m_accept_messages) {
         return;
     }
 
+    // Grab the sender channel.
     channel_t sender = dgi.read_channel();
+
+    // We don't want to receive messages from ourselves.
     if(sender == m_channel) {
-        return;    // ignore messages from ourselves
+        return;
     }
 
+    // Grab the message type.
     uint16_t msgtype = dgi.read_uint16();
+
+    // Handle each message type we expect.
     switch(msgtype) {
     case CLIENTAGENT_EJECT: {
         uint16_t reason = dgi.read_uint16();
@@ -564,6 +573,7 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
 
         if(ai_deletion) {
             // If the AI server we're on has crashed, then we need to fall over and die.
+            m_accept_messages = false;
             stringstream ss;
             ss << "The AI server has unexpectedly disconnected.";
             send_disconnect(CLIENT_DISCONNECT_AI_DISCONNECT, ss.str());
