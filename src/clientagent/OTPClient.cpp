@@ -266,6 +266,7 @@ class OTPClient : public Client, public NetworkHandler
             ext_dg->add_uint64(m_channel);
             ext_dg->add_data(dg);
             route_datagram(ext_dg);
+            return;
         }
 
         // Send the datagram straight to the client.
