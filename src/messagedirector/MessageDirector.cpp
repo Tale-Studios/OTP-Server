@@ -200,12 +200,14 @@ void MessageDirector::process_datagram(MDParticipantInterface *p, DatagramHandle
         receive_log << "\n";
     } catch(DatagramIteratorEOF &) {
         // Log error with receivers output
-        if(p) {
+        if(p && m_upstream) {
+            m_log.error() << "Detected truncated datagram reading header for upstream MD from participant '"
+                          << p->m_name << "'.\n";
+        } else if(!p) {
+            m_log.error() << "Detected truncated datagram reading header from upstream MD.\n";
+        } else {
             m_log.error() << "Detected truncated datagram reading header from '"
                           << p->m_name << "'.\n";
-        } else {
-            m_log.error() << "Detected truncated datagram reading header from "
-                          "unknown participant.\n";
         }
         return;
     }
@@ -226,8 +228,16 @@ void MessageDirector::process_datagram(MDParticipantInterface *p, DatagramHandle
             participant->handle_datagram(dg, msg_dgi);
         } catch(DatagramIteratorEOF &) {
             // Log error with receivers output
-            m_log.error() << "Detected truncated datagram in handle_datagram for '"
-                          << participant->m_name << "' from participant '" << p->m_name << "'.\n";
+            if(p && m_upstream) {
+                m_log.error() << "Detected truncated datagram in handle_datagram for upstream MD participant '"
+                              << participant->m_name << "' from participant '" << p->m_name << "'.\n";
+            } else if(!p) {
+                m_log.error() << "Detected truncated datagram in handle_datagram for '"
+                              << participant->m_name << "' from upstream MD.\n";
+            } else {
+                m_log.error() << "Detected truncated datagram in handle_datagram for '"
+                              << participant->m_name << "' from participant '" << p->m_name << "'.\n";
+            }
             return;
         }
     }
