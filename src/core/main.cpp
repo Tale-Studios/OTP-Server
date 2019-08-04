@@ -243,7 +243,7 @@ int main(int argc, char *argv[])
     }
 
     // Log that the daemon has been initialized.
-    mainlog.info() << "Initialized OTP daemon.\n";
+    mainlog.info() << "Started OTP server.\n";
 
     // Run the main event loop
     int exit_code = 0;

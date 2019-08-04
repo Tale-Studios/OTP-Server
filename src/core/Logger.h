@@ -179,7 +179,7 @@ class LogCategory
     LockedLogOutput level() \
     { \
         LockedLogOutput out = g_logger->log(severity); \
-        out << m_name << ": "; \
+        out << "[" << m_name << "] "; \
         return out; \
     }
 

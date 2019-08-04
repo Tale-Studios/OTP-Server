@@ -34,22 +34,22 @@ void StateServer::handle_generate(DatagramIterator &dgi, bool has_other)
     zone_t zone_id = dgi.read_zone();
     uint16_t dc_id = dgi.read_uint16();
 
-    // Make sure the object id is unique
+    // Make sure the object id is unique.
     if(m_objs.find(do_id) != m_objs.end()) {
-        m_log->warning() << "Received generate for already-existing object ID=" << do_id << std::endl;
+        m_log->warning() << "Received generate for already existing object ID " << do_id << std::endl;
         return;
     }
 
-    // Make sure the class exists in the file
+    // Make sure the class exists in the file.
     DCClass *dc_class = g_dcf->get_class(dc_id);
     if(!dc_class) {
-        m_log->error() << "Received create for unknown dclass with class id '" << dc_id << "'\n";
+        m_log->error() << "Received create for unknown dclass with class ID '" << dc_id << "'\n";
         return;
     }
 
     // Make sure we aren't creating an object with a DOID of zero.
     if(do_id == 0) {
-        m_log->error() << "Attempted to create an object with DOID 0.\n";
+        m_log->error() << "Attempted to create an object with object ID 0.\n";
         return;
     }
 
@@ -62,7 +62,7 @@ void StateServer::handle_generate(DatagramIterator &dgi, bool has_other)
         }
 
         // Set our root object.
-        m_log->info() << "Root object registered to ID " << do_id << ".\n";
+        m_log->info() << "Root object registered to object ID " << do_id << ".\n";
         m_root_object = do_id;
     }
 
@@ -74,7 +74,7 @@ void StateServer::handle_generate(DatagramIterator &dgi, bool has_other)
 
     // Check if the parent is the root object.
     if(m_root_object != 0 && parent_id == m_root_object) {
-        m_log->info() << "New AI server with ID " << do_id << " connected.\n";
+        m_log->info() << "New AI server with object ID " << do_id << " connected.\n";
     }
 
     // Create the object

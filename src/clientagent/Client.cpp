@@ -136,19 +136,19 @@ DCClass *Client::lookup_object(doid_t do_id)
         return g_uberdogs[do_id].dcc;
     }
 
-    // Next, check the object cache, but this client only knows about it
-    // if it occurs in m_seen_objects or m_owned_objects:
+    // Let's check if this is an object the client owns:
     if(m_owned_objects.find(do_id) != m_owned_objects.end()) {
         return m_owned_objects[do_id].dcc;
     }
 
+    // Next, check if this is an object that this client can see:
     else if(m_seen_objects.find(do_id) != m_seen_objects.end()) {
         if(m_visible_objects.find(do_id) != m_visible_objects.end()) {
             return m_visible_objects[do_id].dcc;
         }
     }
 
-    // Hey we also know about it if its a declared object!
+    // Lastly, we can check if this is a declared object:
     else if(m_declared_objects.find(do_id) != m_declared_objects.end()) {
         return m_declared_objects[do_id].dcc;
     }

@@ -521,7 +521,7 @@ class MongoDatabase : public DatabaseBackend
         // Init URI.
         try {
             m_uri = mongocxx::uri {db_server.get_rval(m_config)};
-        } catch(mongocxx::logic_error &) {
+        } catch(const mongocxx::logic_error &) {
             m_log->fatal() << "Could not parse URI!" << endl;
             exit(1);
         }
@@ -646,7 +646,7 @@ class MongoDatabase : public DatabaseBackend
                 DatagramIterator dgi(dg);
                 dc2bson(builder << it.first->get_name(), it.first, dgi);
             }
-        } catch(ConversionException &e) {
+        } catch(const ConversionException &e) {
             m_log->error() << "While formatting "
                            << operation->dclass()->get_name()
                            << " for insertion: " << e.what() << endl;
@@ -672,7 +672,7 @@ class MongoDatabase : public DatabaseBackend
                                             << "dclass" << operation->dclass()->get_name()
                                             << "fields" << fields
                                             << finalize);
-        } catch(mongocxx::operation_exception &e) {
+        } catch(const mongocxx::operation_exception &e) {
             m_log->error() << "Cannot insert new "
                            << operation->dclass()->get_name()
                            << "(" << doid << "): " << e.what() << endl;
@@ -691,7 +691,7 @@ class MongoDatabase : public DatabaseBackend
                           << "_id" << static_cast<int64_t>(operation->doid()) <<
                           finalize);
             success = result && (result->deleted_count() == 1);
-        } catch(mongocxx::operation_exception &e) {
+        } catch(const mongocxx::operation_exception &e) {
             m_log->error() << "Unexpected error while deleting "
                            << operation->doid() << ": " << e.what() << endl;
             operation->on_failure();
@@ -715,7 +715,7 @@ class MongoDatabase : public DatabaseBackend
             obj = db["otp.objects"].find_one(document {}
                                                 << "_id" << static_cast<int64_t>(operation->doid())
                                                 << finalize);
-        } catch(mongocxx::operation_exception &e) {
+        } catch(const mongocxx::operation_exception &e) {
             m_log->error() << "Unexpected error occurred while trying to"
                            " retrieve object with DOID "
                            << operation->doid() << ": " << e.what() << endl;
@@ -787,7 +787,7 @@ class MongoDatabase : public DatabaseBackend
         bsoncxx::stdx::optional<bsoncxx::document::value> obj;
         try {
             obj = db["otp.objects"].find_one_and_update(query_obj.view(), updates.view());
-        } catch(mongocxx::operation_exception &e) {
+        } catch(const mongocxx::operation_exception &e) {
             m_log->error() << "Unexpected error while modifying "
                            << operation->doid() << ": " << e.what() << endl;
             operation->on_failure();
@@ -808,7 +808,7 @@ class MongoDatabase : public DatabaseBackend
                 try {
                     obj = db["otp.objects"].find_one(document {}
                                                         << "_id" << static_cast<int64_t>(operation->doid()) << finalize);
-                } catch(mongocxx::operation_exception &e) {
+                } catch(const mongocxx::operation_exception &e) {
                     m_log->error() << "Unexpected error while modifying "
                                    << operation->doid() << ": " << e.what() << endl;
                     operation->on_failure();
@@ -873,7 +873,7 @@ class MongoDatabase : public DatabaseBackend
             db["otp.objects"].replace_one(
                 document {} << "_id" << static_cast<int64_t>(operation->doid()) << finalize,
                 obj_v);
-        } catch(mongocxx::operation_exception &e) {
+        } catch(const mongocxx::operation_exception &e) {
             // Wow, we REALLY fail at life.
             m_log->error() << "Could not revert corrupting changes to "
                            << operation->doid() << ": " << e.what() << endl;
@@ -918,7 +918,7 @@ class MongoDatabase : public DatabaseBackend
                 snap->m_fields[field].resize(dg->size());
                 memcpy(snap->m_fields[field].data(), dg->get_data(), dg->size());
             }
-        } catch(ConversionException &e) {
+        } catch(const ConversionException &e) {
             m_log->error() << "Unexpected error while trying to format"
                            " database snapshot for " << dclass_name << "(" << doid << "): "
                            << e.what() << endl;
@@ -941,7 +941,7 @@ class MongoDatabase : public DatabaseBackend
             // We've exhausted our supply of doids from the monotonic counter.
             // We must now resort to pulling things out of the free list:
             return assign_doid_reuse(db);
-        } catch(mongocxx::operation_exception &e) {
+        } catch(const mongocxx::operation_exception &e) {
             m_log->error() << "Unexpected error occurred while trying to"
                            " allocate a new DOID: " << e.what() << endl;
             return INVALID_DO_ID;
@@ -1011,7 +1011,7 @@ class MongoDatabase : public DatabaseBackend
                 document {} << "$push" << open_document
                 << "doid.free" << static_cast<int64_t>(doid)
                 << close_document << finalize);
-        } catch(mongocxx::operation_exception &e) {
+        } catch(const mongocxx::operation_exception &e) {
             m_log->error() << "Could not return doid " << doid
                            << " to free pool: " << e.what() << endl;
         }

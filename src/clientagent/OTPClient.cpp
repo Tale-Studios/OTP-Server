@@ -26,7 +26,7 @@ static ConfigVariable<uint64_t> write_buffer_size("write_buffer_size", 256 * 102
         otpclient_config);
 static ConfigVariable<unsigned int> write_timeout_ms("write_timeout_ms", 6000, otpclient_config);
 
-//by default, have heartbeat disabled.
+// By default, have heartbeat disabled.
 static ConfigVariable<long> heartbeat_timeout_config("heartbeat_timeout", 0, otpclient_config);
 
 static bool is_permission_level(const string& str)
@@ -54,7 +54,7 @@ class OTPClient : public Client, public NetworkHandler
     bool m_send_version;
     InterestPermission m_interests_allowed;
 
-    //Heartbeat
+    // Heartbeat:
     long m_heartbeat_timeout;
     Timeout* m_heartbeat_timer = nullptr;
 
