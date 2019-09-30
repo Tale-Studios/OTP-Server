@@ -334,7 +334,7 @@ bool Client::is_historical_object(doid_t do_id)
 // Client::send_disconnect can be called by subclasses to handle logging the event.
 void Client::send_disconnect(uint16_t reason, const string &error_string, bool security)
 {
-    (security ? m_log->security() : m_log->debug())
+    (security ? m_log->security() : m_log->info())
             << "Ejecting client (" << reason << "): "
             << error_string << endl;
 
