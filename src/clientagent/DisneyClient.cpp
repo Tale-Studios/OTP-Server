@@ -623,7 +623,7 @@ class DisneyClient : public Client, public NetworkHandler
             //handle_client_set_wishname(dgi);
             break;
         case CLIENT_GET_AVATARS:
-            //handle_client_get_avatars(dgi);
+            g_client_manager->request_avatar_list(*this, m_channel >> 32);
             break;
         case CLIENT_HEARTBEAT:
             handle_client_heartbeat();
