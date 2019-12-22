@@ -613,9 +613,15 @@ class DisneyClient : public Client, public NetworkHandler
         case CLIENT_REMOVE_INTEREST:
             handle_client_remove_interest(dgi);
             break;
-        case CLIENT_CREATE_AVATAR:
-            //handle_client_create_avatar(dgi);
-            break;
+        case CLIENT_CREATE_AVATAR: {
+            uint16_t echo_context = dgi.read_uint16();
+            string dna_string = dgi.read_string();
+            uint8_t index = dgi.read_uint8();
+
+            g_client_manager->create_avatar(*this, m_channel >> 32,
+                                            dna_string, index);
+        }
+        break;
         case CLIENT_SET_NAME_PATTERN:
             //handle_client_set_name_pattern(dgi);
             break;

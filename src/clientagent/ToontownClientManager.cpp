@@ -1039,7 +1039,8 @@ void ToontownClientManager::login(DisneyClient& client, string play_token, chann
     op->start(play_token, version, dc_hash, token_type, want_magic_words);
 }
 
-void ToontownClientManager::create_toon(DisneyClient& client, uint32_t sender, string dna_string, uint8_t index)
+void ToontownClientManager::create_avatar(DisneyClient& client, uint32_t sender,
+                                          string dna_string, uint8_t index)
 {
     ToontownCreateAvatarOperation* operation = new ToontownCreateAvatarOperation(this, client, sender);
     bool success = run_operation(operation, sender);
@@ -1048,7 +1049,8 @@ void ToontownClientManager::create_toon(DisneyClient& client, uint32_t sender, s
     }
 }
 
-void ToontownClientManager::set_name_typed(DisneyClient& client, uint32_t sender, uint32_t av_id, string name)
+void ToontownClientManager::set_name_typed(DisneyClient& client, uint32_t sender,
+                                           uint32_t av_id, string name)
 {
     SetNameTypedOperation* operation = new SetNameTypedOperation(this, client, sender);
     bool success = run_operation(operation, sender);

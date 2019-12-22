@@ -170,8 +170,8 @@ class ToontownClientManager : virtual public OTPClientManager
                uint32_t dc_hash, int32_t token_type, std::string want_magic_words);
 
     // Runs a ToontownCreateAvatarOperation.
-    void create_toon(DisneyClient& client, uint32_t sender,
-                     std::string dna_string, uint8_t index);
+    void create_avatar(DisneyClient& client, uint32_t sender,
+                       std::string dna_string, uint8_t index);
 
     // Runs a SetNameTypedOperation.
     void set_name_typed(DisneyClient& client, uint32_t sender,
