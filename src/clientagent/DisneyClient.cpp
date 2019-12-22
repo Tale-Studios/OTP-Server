@@ -32,7 +32,8 @@ static ConfigVariable<unsigned int> write_timeout_ms("write_timeout_ms", 6000, d
 static ConfigVariable<long> heartbeat_timeout_config("heartbeat_timeout", 0, disneyclient_config);
 
 // We only want one client manager instance for every DisneyClient:
-static OTPClientManager* g_client_manager;
+static OTPClientManager* g_cm;
+static ToontownClientManager* g_ttcm;
 
 class DisneyClient : public Client, public NetworkHandler
 {
@@ -179,12 +180,13 @@ class DisneyClient : public Client, public NetworkHandler
         set_con_name(ss.str());
 
         // Set up our Client manager depending on supported game types.
-        if(m_game_name == "otp" && g_client_manager == nullptr) {
-            g_client_manager = new OTPClientManager(g_dcf->get_class_by_name("DistributedPlayer"),
-                                                    m_database_id, 6, "developer", m_database_file);
-        } else if(m_game_name == "toon" && g_client_manager == nullptr) {
-            g_client_manager = new ToontownClientManager(g_dcf->get_class_by_name("DistributedToon"),
-                                                         m_database_id, "developer", m_database_file, m_name_file);
+        if(m_game_name == "otp" && g_cm == nullptr) {
+            g_cm = new OTPClientManager(g_dcf->get_class_by_name("DistributedPlayer"),
+                                        m_database_id, 6, "developer", m_database_file);
+        } else if(m_game_name == "toon" && g_cm == nullptr) {
+            g_ttcm = new ToontownClientManager(g_dcf->get_class_by_name("DistributedToon"),
+                                               m_database_id, "developer", m_database_file, m_name_file);
+            g_cm = g_ttcm;
         }
 
         // We only log client-connected events for non-LOCAL (HAProxy L4 checks et al) NetworkClient objects.
@@ -456,8 +458,8 @@ class DisneyClient : public Client, public NetworkHandler
         doid_t do_id = dgi.read_uint32();
 
         // Call back the operator.
-        if(g_client_manager->m_context_operator.find(ctx) != g_client_manager->m_context_operator.end()) {
-            g_client_manager->m_context_operator[ctx]->handle_create(ctx, do_id);
+        if(g_cm->m_context_operator.find(ctx) != g_cm->m_context_operator.end()) {
+            g_cm->m_context_operator[ctx]->handle_create(ctx, do_id);
         }
     }
 
@@ -469,8 +471,8 @@ class DisneyClient : public Client, public NetworkHandler
         uint8_t success = dgi.read_uint8();
 
         // Call back the operator.
-        if(g_client_manager->m_context_operator.find(ctx) != g_client_manager->m_context_operator.end()) {
-            g_client_manager->m_context_operator[ctx]->handle_update(ctx, success);
+        if(g_cm->m_context_operator.find(ctx) != g_cm->m_context_operator.end()) {
+            g_cm->m_context_operator[ctx]->handle_update(ctx, success);
         }
     }
 
@@ -485,8 +487,8 @@ class DisneyClient : public Client, public NetworkHandler
 
         // Call back the operator if we didn't succeed.
         if(!success) {
-            if(g_client_manager->m_context_operator.find(ctx) != g_client_manager->m_context_operator.end()) {
-                g_client_manager->m_context_operator[ctx]->handle_query(ctx, 0, unpacker);
+            if(g_cm->m_context_operator.find(ctx) != g_cm->m_context_operator.end()) {
+                g_cm->m_context_operator[ctx]->handle_query(ctx, 0, unpacker);
             }
         }
 
@@ -494,8 +496,8 @@ class DisneyClient : public Client, public NetworkHandler
 
         unpacker.set_unpack_data(dgi.get_remaining_bytes());
 
-        if(g_client_manager->m_context_operator.find(ctx) != g_client_manager->m_context_operator.end()) {
-            g_client_manager->m_context_operator[ctx]->handle_query(ctx, dclass_id, unpacker);
+        if(g_cm->m_context_operator.find(ctx) != g_cm->m_context_operator.end()) {
+            g_cm->m_context_operator[ctx]->handle_query(ctx, dclass_id, unpacker);
         }
     }
 
@@ -545,7 +547,7 @@ class DisneyClient : public Client, public NetworkHandler
             dgi.skip(sizeof(string)); // validate download
             string want_magic_words = dgi.read_string();
 
-            g_client_manager->login(*this, play_token, m_channel, version,
+            g_cm->login(*this, play_token, m_channel, version,
                                     dc_hash, token_type, want_magic_words);
         }
         break;
@@ -564,7 +566,7 @@ class DisneyClient : public Client, public NetworkHandler
             int32_t token_type = dgi.read_int32();
             string want_magic_words = dgi.read_string();
 
-            g_client_manager->login(*this, play_token, m_channel, version,
+            g_cm->login(*this, play_token, m_channel, version,
                                     dc_hash, token_type, want_magic_words);
         }
         break;
@@ -618,18 +620,38 @@ class DisneyClient : public Client, public NetworkHandler
             string dna_string = dgi.read_string();
             uint8_t index = dgi.read_uint8();
 
-            g_client_manager->create_avatar(*this, m_channel >> 32,
-                                            dna_string, index);
+            g_cm->create_avatar(*this, m_channel >> 32,
+                                dna_string, index);
         }
         break;
-        case CLIENT_SET_NAME_PATTERN:
-            //handle_client_set_name_pattern(dgi);
-            break;
+        case CLIENT_SET_NAME_PATTERN: {
+            if(m_game_name != "toon") {
+                // We aren't running in Toontown mode. Disconnect.
+                stringstream ss;
+                ss << "Message type " << msg_type << " cannot be sent when not in Toontown mode.";
+                send_disconnect(CLIENT_DISCONNECT_INVALID_MSGTYPE, ss.str(), true);
+                return;
+            }
+
+            uint32_t av_id = dgi.read_uint32();
+            int16_t p1 = dgi.read_int16();
+            uint8_t f1 = dgi.read_uint8();
+            int16_t p2 = dgi.read_int16();
+            uint8_t f2 = dgi.read_uint8();
+            int16_t p3 = dgi.read_int16();
+            uint8_t f3 = dgi.read_uint8();
+            int16_t p4 = dgi.read_int16();
+            uint8_t f4 = dgi.read_uint8();
+
+            g_ttcm->set_name_pattern(*this, m_channel >> 32, av_id, p1, f1,
+                                     p2, f2, p3, f3, p4, f4);
+        }
+        break;
         case CLIENT_SET_WISHNAME:
             //handle_client_set_wishname(dgi);
             break;
         case CLIENT_GET_AVATARS:
-            g_client_manager->request_avatar_list(*this, m_channel >> 32);
+            g_cm->request_avatar_list(*this, m_channel >> 32);
             break;
         case CLIENT_HEARTBEAT:
             handle_client_heartbeat();
