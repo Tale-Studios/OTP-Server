@@ -548,7 +548,7 @@ class DisneyClient : public Client, public NetworkHandler
             string want_magic_words = dgi.read_string();
 
             g_cm->login(*this, play_token, m_channel, version,
-                                    dc_hash, token_type, want_magic_words);
+                        dc_hash, token_type, want_magic_words);
         }
         break;
         case CLIENT_LOGIN_TOONTOWN: {
@@ -567,7 +567,7 @@ class DisneyClient : public Client, public NetworkHandler
             string want_magic_words = dgi.read_string();
 
             g_cm->login(*this, play_token, m_channel, version,
-                                    dc_hash, token_type, want_magic_words);
+                        dc_hash, token_type, want_magic_words);
         }
         break;
         case CLIENT_OBJECT_UPDATE_FIELD:
@@ -647,9 +647,21 @@ class DisneyClient : public Client, public NetworkHandler
                                      p2, f2, p3, f3, p4, f4);
         }
         break;
-        case CLIENT_SET_WISHNAME:
-            //handle_client_set_wishname(dgi);
-            break;
+        case CLIENT_SET_WISHNAME: {
+            if(m_game_name != "toon") {
+                // We aren't running in Toontown mode. Disconnect.
+                stringstream ss;
+                ss << "Message type " << msg_type << " cannot be sent when not in Toontown mode.";
+                send_disconnect(CLIENT_DISCONNECT_INVALID_MSGTYPE, ss.str(), true);
+                return;
+            }
+
+            uint32_t av_id = dgi.read_uint32();
+            string name = dgi.read_string();
+
+            g_ttcm->set_name_typed(*this, m_channel >> 32, av_id, name);
+        }
+        break;
         case CLIENT_GET_AVATARS:
             g_cm->request_avatar_list(*this, m_channel >> 32);
             break;

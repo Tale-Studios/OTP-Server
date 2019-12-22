@@ -532,8 +532,8 @@ class OTPClientManager
     void request_avatar_list(DisneyClient& client, uint32_t sender);
 
     // Runs a CreateAvatarOperation.
-    void create_avatar(DisneyClient& client, uint32_t sender,
-                       std::string dna_string, uint8_t index);
+    virtual void create_avatar(DisneyClient& client, uint32_t sender,
+                               std::string dna_string, uint8_t index);
 
     // Runs an AcknowledgeNameOperation.
     void acknowledge_avatar_name(DisneyClient& client, uint32_t av_id);
