@@ -2,18 +2,7 @@ cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
-project(OTPd)
-
-find_package(PythonLibs)
-find_package(PythonInterp)
-if(PYTHONINTERP_FOUND)
-    enable_testing()
-    if(PYTHON_VERSION_MAJOR EQUAL 2)
-        set(PYTHON2_EXECUTABLE "${PYTHON_EXECUTABLE}")
-    else()
-        set(PYTHON2_EXECUTABLE python2)
-    endif()
-endif()
+project(otp_server)
 
 ### Configure CMake to use our extra Find modules ###
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules/")
@@ -32,7 +21,7 @@ if(WIN32)
         add_definitions("/wd4267") # 64-bit size_t complaints
     endif()
 else()
-    option(STATIC_OTP "Builds a self-contained OTP binary (Non-Win32 only)" OFF)
+    option(STATIC_OTP "Builds a self-contained OTP daemon binary (Non-Win32 only)" OFF)
 endif()
 
 if(STATIC_OTP)
@@ -90,6 +79,7 @@ set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -DOTP_DEBU
 ### OS Specific Settings ###
 if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")  ### Windows requires winsock
     list(APPEND EXTRA_LIBS wsock32 ws2_32)
+    set(CMAKE_INSTALL_PREFIX "C:\\mongo-cxx-driver")
 endif()
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")        ### Linux requires pthreads
@@ -131,14 +121,6 @@ if(USE_32BIT_SIZETAGS)
     add_definitions(-DDCLASS_32BIT_SIZETAG)
 endif()
 
-set(BUILD_TESTS OFF CACHE BOOL "If set to true, test files will be compiled in")
-if(BUILD_TESTS)
-    set(TEST_FILES
-        src/tests/MDParticipantTest.cpp
-        src/tests/MDPerformanceTest.cpp
-    )
-endif()
-
 # DB backends can add libraries here as needed:
 set(DB_LIBRARY_NAMES)
 
@@ -167,9 +149,6 @@ if(BUILD_DBSERVER)
             ${DBSERVER_FILES}
             src/database/YAMLDatabase.cpp
         )
-        add_test(db_yaml "${PYTHON2_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/test/test_dbserver_yaml.py")
-        add_test(validate_config_dbyaml "${PYTHON2_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/test/test_config_dbyaml.py")
-        set(PYTHON_TESTS ${PYTHON_TESTS} db_yaml validate_config_dbyaml)
     endif()
 
     ### Check for the presence of the MongoDB client library ###
@@ -199,10 +178,6 @@ if(BUILD_DBSERVER)
         else()
             message(FATAL_ERROR "BUILD_DB_MONGO is set but no libraries were found, this is never supposed to happen!")
         endif()
-        add_test(db_mongo "${PYTHON2_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/test/test_dbserver_mongodb.py")
-        add_test(validate_config_dbmongo "${PYTHON2_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/test/test_config_dbmongo.py")
-        # TODO: Config validation test
-        list(APPEND PYTHON_TESTS db_mongo)
     endif()
 else()
     unset(BUILD_DB_FILESYSTEM CACHE)
@@ -218,9 +193,6 @@ if(BUILD_STATESERVER)
         src/stateserver/DistributedObject.cpp
         src/stateserver/DistributedObject.h
     )
-    add_test(stateserver "${PYTHON2_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/test/test_stateserver.py")
-    add_test(validate_config_stateserver "${PYTHON2_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/test/test_config_stateserver.py")
-    set(PYTHON_TESTS ${PYTHON_TESTS} stateserver validate_config_stateserver)
 
     set(BUILD_STATESERVER_DBSS ON CACHE BOOL "If on, the Database-State Server will be built into binary")
     if(BUILD_STATESERVER_DBSS)
@@ -231,9 +203,6 @@ if(BUILD_STATESERVER)
             src/stateserver/LoadingObject.h
             src/stateserver/LoadingObject.cpp
         )
-        add_test(dbss "${PYTHON2_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/test/test_dbss.py")
-        add_test(validate_config_dbss "${PYTHON2_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/test/test_config_dbss.py")
-        set(PYTHON_TESTS ${PYTHON_TESTS} dbss validate_config_dbss)
     endif()
 else()
     unset(BUILD_STATESERVER_DBSS CACHE)
@@ -245,8 +214,6 @@ if(BUILD_EVENTLOGGER)
         src/eventlogger/EventLogger.cpp
         src/eventlogger/EventLogger.h
     )
-    add_test(eventlogger "${PYTHON2_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/test/test_eventlogger.py")
-    add_test(validate_config_eventlogger "${PYTHON2_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/test/test_config_eventlogger.py")
 endif()
 
 set(BUILD_CLIENTAGENT ON CACHE BOOL "If on, Client Agent will be built into binary")
@@ -264,6 +231,10 @@ if(BUILD_CLIENTAGENT)
             src/clientagent/ClientFactory.h
             src/clientagent/OTPClient.cpp
             src/clientagent/DisneyClient.cpp
+            src/clientagent/OTPClientManager.h
+            src/clientagent/OTPClientManager.cpp
+            src/clientagent/ToontownClientManager.h
+            src/clientagent/ToontownClientManager.cpp
         )
     else()
         set(CLIENTAGENT_FILES
@@ -277,9 +248,6 @@ if(BUILD_CLIENTAGENT)
             src/clientagent/OTPClient.cpp
         )
     endif()
-    add_test(clientagent "${PYTHON2_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/test/test_clientagent.py")
-    add_test(validate_config_clientagent "${PYTHON2_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/test/test_config_clientagent.py")
-    set(PYTHON_TESTS ${PYTHON_TESTS} clientagent validate_config_clientagent)
 endif()
 
 ### Define core components ###
@@ -345,9 +313,6 @@ set(NET_FILES
 )
 
 include_directories(src)
-add_test(validate_config_core "${PYTHON2_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/test/test_config.py")
-add_test(messagedirector "${PYTHON2_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/test/test_messagedirector.py")
-set(PYTHON_TESTS ${PYTHON_TESTS} messagedirector)
 add_executable(otp_server
     ${CORE_FILES}
     ${CONFIG_FILES}
@@ -357,7 +322,6 @@ add_executable(otp_server
     ${STATESERVER_FILES}
     ${EVENTLOGGER_FILES}
     ${CLIENTAGENT_FILES}
-    ${TEST_FILES}
     ${DBSERVER_FILES}
 )
 
@@ -383,17 +347,14 @@ if(DBSERVER_FILES)
     add_definitions(-DBUILD_STATESERVER_DBSS)
     source_group("DatabaseServer" FILES ${DBSERVER_FILES})
 endif()
-if(TEST_FILES)
-    source_group("DaemonTests" FILES ${TEST_FILES})
-endif()
 
 ### Header source group ###
-#foreach(sourcefile IN LISTS OTPD_SOURCES)
+#foreach(sourcefile IN LISTS otp_server_SOURCES)
 #   if(sourcefile MATCHES .*\\.h)
-#       set(OTPD_HEADERS "${OTPD_HEADERS} ${sourcefile}")
+#       set(otp_server_HEADERS "${otp_server_HEADERS} ${sourcefile}")
 #   endif()
 #endforeach(sourcefile)
-#source_group("Header Files" FILES ${OTPD_HEADERS})
+#source_group("Header Files" FILES ${otp_server_HEADERS})
 
 add_library(dclass
     src/dclass/p3dcparser_composite1.cpp
@@ -404,11 +365,3 @@ add_library(dclass
 add_dependencies(otp_server dclass)
 target_link_libraries(otp_server dclass ${YAMLCPP_LIBRARY} ${DB_LIBRARY_NAMES} ${LIBUV_LIBRARY} ${EXTRA_LIBS})
 install(TARGETS otp_server DESTINATION bin)
-
-### Handle some final testing configuration ###
-if(USE_32BIT_DATAGRAMS)
-    set(PYTHON_TEST_ENV ${PYTHON_TEST_ENV} "USE_32BIT_DATAGRAMS=true")
-endif()
-if(PYTHON_TEST_ENV)
-    set_tests_properties(${PYTHON_TESTS} PROPERTIES ENVIRONMENT "${PYTHON_TEST_ENV}")
-endif()

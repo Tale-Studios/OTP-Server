@@ -145,7 +145,16 @@ In addition, a DB-SS listens on the entire range of object IDs that it manages. 
 
 
 ## Building ##
-Documentation is provided by the original Astron project.
+In CMake, set BOOST_ROOT to the `boost_1_62_0` directory, the root folder.. Set `BOOST_LIBRARYDIR` to `lib64-msvc-14.0`, the folder containing the libs & dlls.
+Download https://github.com/jbeder/yaml-cpp/archive/yaml-cpp-0.6.2.zip, build it, and add it as a dependency.
+Download https://github.com/mongodb/mongo-c-driver/archive/1.13.0.zip, build it, and install it.
+Download https://github.com/mongodb/mongo-cxx-driver/archive/r3.4.0.zip, build it, install it, and add it as a dependency.
+Download https://github.com/libuv/libuv/archive/v1.24.0.zip, build it, and add it as a dependency.
+If necessary, set CMAKE_INSTALL_PREFIX to your Mongo root dir. Then, CMake will automatically find Mongo.
+Note that Boost will automatically be found on Windows if you name your boost root dir "boost" and put it in C:\.
+To add any dependency, just set the variables that CMake requires (usually, just the path to the .lib or the folder in it, and the include folder).
+If CMake is configured correctly, you will not have to manually change link/compile paths in the CXX compiler.
+
 
 
 

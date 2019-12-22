@@ -2,9 +2,9 @@
 #include "ClientMessages.h"
 #include "ClientFactory.h"
 #include "ClientAgent.h"
+#include "ToontownClientManager.h"
 #include "DisneyClientMessages.h"
 #include "net/NetworkClient.h"
-#include "json/json.hpp"
 #include "core/global.h"
 #include "core/msgtypes.h"
 #include "config/constraints.h"
@@ -14,12 +14,13 @@
 #include "util/Timeout.h"
 
 using namespace std;
-using json = nlohmann::json;
 
 static ConfigGroup disneyclient_config("libdisney", ca_client_config);
 
+static ConfigVariable<string> game_name_config("game_name", "otp", disneyclient_config);
 static ConfigVariable<uint32_t> database_id_config("database_id", 4003, disneyclient_config);
 static ConfigVariable<string> database_file_config("database_file", "account-bridge.json", disneyclient_config);
+static ConfigVariable<string> name_file_config("name_file", "NameMasterEnglish.txt", disneyclient_config);
 static ConfigVariable<bool> send_hash_to_client("send_hash", true, disneyclient_config);
 static ConfigVariable<bool> send_version_to_client("send_version", true, disneyclient_config);
 
@@ -30,31 +31,17 @@ static ConfigVariable<unsigned int> write_timeout_ms("write_timeout_ms", 6000, d
 // By default, have heartbeat disabled.
 static ConfigVariable<long> heartbeat_timeout_config("heartbeat_timeout", 0, disneyclient_config);
 
-// Avatar context struct:
-struct AvatarContext {
-    uint16_t echo_context;
-    string dna_string;
-    uint8_t index;
-};
-
-// Post-creation Avatar context struct:
-struct AvatarCreateContext {
-    uint16_t echo_context;
-    string dna_string;
-    uint8_t index;
-    std::set<uint32_t> av_set;
-};
+// We only want one client manager instance for every DisneyClient:
+static OTPClientManager* g_client_manager;
 
 class DisneyClient : public Client, public NetworkHandler
 {
   private:
     std::shared_ptr<NetworkClient> m_client;
-    uint32_t m_context = 0;
-    std::map<uint32_t, string> m_token_contexts;
-    std::map<uint32_t, AvatarContext> m_create_av_contexts;
-    std::map<uint32_t, AvatarCreateContext> m_creation_av_contexts;
 
     ConfigNode m_config;
+    string m_game_name;
+    string m_name_file;
     string m_database_file;
     uint32_t m_database_id;
     bool m_clean_disconnect;
@@ -70,7 +57,9 @@ class DisneyClient : public Client, public NetworkHandler
     DisneyClient(ConfigNode config, ClientAgent* client_agent, const std::shared_ptr<uvw::TcpHandle> &socket,
                  const uvw::Addr &remote, const uvw::Addr &local, const bool haproxy_mode) :
         Client(config, client_agent), m_client(std::make_shared<NetworkClient>(this)),
-        m_config(config), m_database_file(database_file_config.get_rval(config)),
+        m_config(config), m_game_name(game_name_config.get_rval(config)),
+        m_name_file(name_file_config.get_rval(config)),
+        m_database_file(database_file_config.get_rval(config)),
         m_database_id(database_id_config.get_rval(config)), m_clean_disconnect(false),
         m_send_hash(send_hash_to_client.get_rval(config)),
         m_send_version(send_version_to_client.get_rval(config)),
@@ -79,6 +68,81 @@ class DisneyClient : public Client, public NetworkHandler
         pre_initialize();
 
         m_client->initialize(socket, remote, local, haproxy_mode);
+    }
+
+    inline virtual bool get_send_hash()
+    {
+        return m_send_hash;
+    }
+
+    inline virtual bool get_send_version()
+    {
+        return m_send_version;
+    }
+
+    inline virtual channel_t get_allocated_channel()
+    {
+        return m_allocated_channel;
+    }
+
+    inline virtual channel_t get_client_channel()
+    {
+        return m_channel;
+    }
+
+    inline virtual void set_client_channel(channel_t client_channel)
+    {
+        m_channel = client_channel;
+    }
+
+    virtual void log_warning(string warning)
+    {
+        m_log->warning() << warning << endl;
+    }
+
+    inline virtual string get_server_version()
+    {
+        return m_client_agent->get_version();
+    }
+
+    inline virtual uint32_t get_dc_hash()
+    {
+        return m_client_agent->get_hash();
+    }
+
+    inline virtual void set_client_state(ClientState state)
+    {
+        m_state = state;
+    }
+
+    virtual void write_server_event(LoggedEvent& event)
+    {
+        log_event(event);
+    }
+
+    virtual void subscribe_to_channel(channel_t channel)
+    {
+        subscribe_channel(channel);
+    }
+
+    virtual void unsubscribe_from_channel(channel_t channel)
+    {
+        unsubscribe_channel(channel);
+    }
+
+    virtual void create_post_remove(channel_t channel, DatagramHandle dg)
+    {
+        add_post_remove(channel, dg);
+    }
+
+    virtual void wipe_post_removes(channel_t channel)
+    {
+        clear_post_removes(channel);
+    }
+
+    virtual void dispatch_datagram(DatagramHandle dg)
+    {
+        route_datagram(dg);
     }
 
     inline void pre_initialize()
@@ -113,6 +177,15 @@ class DisneyClient : public Client, public NetworkHandler
            << ":" << m_client->get_remote().port << ", " << m_channel << ")";
         m_log->set_name(ss.str());
         set_con_name(ss.str());
+
+        // Set up our Client manager depending on supported game types.
+        if(m_game_name == "otp" && g_client_manager == nullptr) {
+            g_client_manager = new OTPClientManager(g_dcf->get_class_by_name("DistributedPlayer"),
+                                                    m_database_id, 6, "developer", m_database_file);
+        } else if(m_game_name == "toon" && g_client_manager == nullptr) {
+            g_client_manager = new ToontownClientManager(g_dcf->get_class_by_name("DistributedToon"),
+                                                         m_database_id, "developer", m_database_file, m_name_file);
+        }
 
         // We only log client-connected events for non-LOCAL (HAProxy L4 checks et al) NetworkClient objects.
         if(!m_client->is_local()) {
@@ -236,7 +309,7 @@ class DisneyClient : public Client, public NetworkHandler
     // forward_datagram should foward the datagram to the client, or where appopriate parse
     // the packet and send the appropriate equivalent data.
     // Handler for CLIENTAGENT_SEND_DATAGRAM.
-    virtual void forward_datagram(DatagramHandle dg)
+    virtual void forward_datagram(DatagramHandle dg, bool send_datagram = 0)
     {
         m_client->send_datagram(dg);
     }
@@ -376,434 +449,54 @@ class DisneyClient : public Client, public NetworkHandler
         m_client->send_datagram(resp);
     }
 
-    // Method for packing an int into a field.
-    virtual void pack_int(DCPacker &packer, DCField *field, int value)
-    {
-        packer.raw_pack_uint16(field->get_number());
-        packer.begin_pack(field);
-        packer.push();
-        packer.pack_int(value);
-        packer.pop();
-        packer.end_pack();
-    }
-
-    // Method for packing a uint into a field.
-    virtual void pack_uint(DCPacker &packer, DCField *field, unsigned int value)
-    {
-        packer.raw_pack_uint16(field->get_number());
-        packer.begin_pack(field);
-        packer.push();
-        packer.pack_uint(value);
-        packer.pop();
-        packer.end_pack();
-    }
-
-    // Method for packing a string into a field.
-    virtual void pack_string(DCPacker &packer, DCField *field, const string value)
-    {
-        packer.raw_pack_uint16(field->get_number());
-        packer.begin_pack(field);
-        packer.push();
-        packer.pack_string(value);
-        packer.pop();
-        packer.end_pack();
-    }
-
-    // Toontown client wants to login.
-    virtual void handle_client_login_toontown(DatagramIterator &dgi)
-    {
-        string play_token = dgi.read_string();
-        string version = dgi.read_string();
-        uint32_t dc_hash = dgi.read_uint32();
-        int32_t token_type = dgi.read_int32();
-        string want_magic_words = dgi.read_string();
-
-        lock_guard<recursive_mutex> lock(m_client_lock);
-
-        // Before we worry about the play token, we need to compare
-        // the DC hash and server version we received.
-        if(version != m_client_agent->get_version()) {
-            stringstream ss;
-            ss << "Bad DC Version Compare: client=" << version;
-            if(m_send_version) {
-                ss << ", server=" << m_client_agent->get_version();
-            }
-
-            login_toontown_response(-1, ss.str(), "", 0);
-
-            return;
-        }
-
-        // Now, check the DC hash.
-        const static uint32_t expected_hash = m_client_agent->get_hash();
-        if(dc_hash != expected_hash) {
-            stringstream ss;
-            ss << "Bad DC Version Compare: client=0x" << hex << dc_hash;
-            if(m_send_hash) {
-                ss << ", server=0x" << expected_hash;
-            }
-
-            login_toontown_response(-1, ss.str(), "", 0);
-
-            return;
-        }
-
-        // Read our JSON account bridge.
-        ifstream acc_file(m_database_file);
-        if(acc_file) {
-            // Our account bridge is valid, so let's parse:
-            json acc_bridge = json::parse(acc_file);
-
-            // Check if the play token exists in the account bridge.
-            if(acc_bridge.find(play_token) != acc_bridge.end()) {
-                // We already have an Account, so let's go ahead and login.
-                string strid = acc_bridge[play_token].get<string>();
-                stringstream ss(strid);
-                doid_t do_id;
-                ss >> do_id;
-                login_account(play_token, do_id);
-                return;
-            }
-        }
-
-        // We'll need to create an Account object.
-        // Instantiate a packer and start packing Account fields.
-        DCPacker packer;
-        DCClass *account = g_dcf->get_class_by_name("Account");
-
-        // First, pack default values for ACCOUNT_AV_SET.
-        DCField *av_set_field = account->get_field_by_name("ACCOUNT_AV_SET");
-        packer.raw_pack_uint16(av_set_field->get_number());
-        packer.begin_pack(av_set_field);
-        packer.push();
-        packer.pack_uint(0);
-        packer.pack_uint(0);
-        packer.pack_uint(0);
-        packer.pack_uint(0);
-        packer.pack_uint(0);
-        packer.pack_uint(0);
-        packer.pop();
-        packer.end_pack();
-
-        // Pack default values for ACCOUNT_AV_SET_DEL.
-        DCField *av_del_field = account->get_field_by_name("ACCOUNT_AV_SET_DEL");
-        packer.raw_pack_uint16(av_del_field->get_number());
-        packer.begin_pack(av_del_field);
-        packer.pack_default_value();
-        packer.end_pack();
-
-        // Pack the default value for ESTATE_ID.
-        DCField *estate_field = account->get_field_by_name("ESTATE_ID");
-        pack_uint(packer, estate_field, 0);
-
-        // Calculate the current system time.
-        auto end = chrono::system_clock::now();
-        std::time_t end_time = chrono::system_clock::to_time_t(end);
-
-        // Pack the time values for CREATED and LAST_LOGIN.
-        DCField *created_field = account->get_field_by_name("CREATED");
-        packer.raw_pack_uint16(created_field->get_number());
-        packer.begin_pack(created_field);
-        packer.pack_string(ctime(&end_time));
-        packer.end_pack();
-        DCField *login_field = account->get_field_by_name("LAST_LOGIN");
-        packer.raw_pack_uint16(login_field->get_number());
-        packer.begin_pack(login_field);
-        packer.pack_string(ctime(&end_time));
-        packer.end_pack();
-
-        // Get a new context for when we receive the response.
-        uint32_t context = m_context++;
-        m_token_contexts[context] = play_token;
-
-        // Create the Account object through the database server.
-        DatagramPtr dg = Datagram::create();
-        dg->add_server_header(m_database_id, m_channel, DBSERVER_CREATE_OBJECT);
-        dg->add_uint32(context);
-        dg->add_uint16(account->get_number());
-        dg->add_uint16(5);
-        dg->add_data(packer.get_string());
-        route_datagram(dg);
-    }
-
-    // Client is being logged in.
-    virtual void login_account(string play_token, doid_t do_id)
-    {
-        // Get the account connection channel.
-        int64_t acc_channel = static_cast<unsigned long long>(do_id) << 32;
-
-        // If somebody is already logged in, eject them.
-        DatagramPtr eject_dg = Datagram::create();
-        eject_dg->add_server_header(acc_channel, m_channel, CLIENTAGENT_EJECT);
-        eject_dg->add_uint16(100);
-        eject_dg->add_string("This account has been logged into elsewhere.");
-        route_datagram(eject_dg);
-
-        // Now we'll add ourselves to the account channel.
-        subscribe_channel(acc_channel);
-
-        // Unsubscribe from our current channel if it isn't our allocated channel.
-        if(m_channel != m_allocated_channel) {
-            unsubscribe_channel(m_channel);
-        }
-
-        // Set our sender channel to represent our account affiliation.
-        m_channel = acc_channel;
-        subscribe_channel(m_channel);
-
-        // Set our client state to established.
-        m_state = CLIENT_STATE_ESTABLISHED;
-
-        // Calculate the current system time.
-        auto end = chrono::system_clock::now();
-        std::time_t end_time = chrono::system_clock::to_time_t(end);
-
-        // Pack a new LAST_LOGIN field timestamp.
-        DCPacker packer;
-        DCClass *account = g_dcf->get_class_by_name("Account");
-        DCField *login_field = account->get_field_by_name("LAST_LOGIN");
-        packer.raw_pack_uint16(login_field->get_number());
-        packer.begin_pack(login_field);
-        packer.pack_string(ctime(&end_time));
-        packer.end_pack();
-
-        // Update the Account object's LAST_LOGIN field.
-        DatagramPtr dg = Datagram::create();
-        dg->add_server_header(m_database_id, m_channel, DBSERVER_OBJECT_SET_FIELD);
-        dg->add_uint32(do_id);
-        dg->add_data(packer.get_string());
-        route_datagram(dg);
-
-        // Finally, send a login response to the client.
-        login_toontown_response(0, "", play_token, do_id);
-    }
-
-    // A DB object related to this Client has been created.
+    // A database object related to this Client has been created.
     virtual void handle_create_object_resp(DatagramIterator &dgi)
     {
-        uint32_t context = dgi.read_uint32();
+        uint32_t ctx = dgi.read_uint32();
         doid_t do_id = dgi.read_uint32();
 
-        lock_guard<recursive_mutex> lock(m_client_lock);
-
-        if(m_token_contexts.find(context) == m_token_contexts.end() &&
-           m_creation_av_contexts.find(context) == m_creation_av_contexts.end()) {
-            // Not a context we're aware of...
-            stringstream ss;
-            ss << "Received an object creation response with an unknown context.";
-            send_disconnect(CLIENT_DISCONNECT_MISSING_OBJECT, ss.str(), true);
-            return;
-        }
-
-        if(m_token_contexts.find(context) != m_token_contexts.end()) {
-            // This is for post-Account creation, so call that method.
-            handle_account_created(context, do_id);
-        }
-        else if(m_creation_av_contexts.find(context) != m_creation_av_contexts.end()) {
-            // This is for post-Avatar creation, so call that method.
-            handle_avatar_created(context, do_id);
+        // Call back the operator.
+        if(g_client_manager->m_context_operator.find(ctx) != g_client_manager->m_context_operator.end()) {
+            g_client_manager->m_context_operator[ctx]->handle_create(ctx, do_id);
         }
     }
 
-    // Client's Account object has been created.
-    virtual void handle_account_created(uint32_t context, doid_t do_id)
-    {
-        // Grab the play token.
-        string play_token = m_token_contexts[context];
-
-        // Load our JSON file.
-        ifstream acc_read(m_database_file);
-        if(!acc_read) {
-            // Uh oh, our account bridge doesn't exist or isn't valid.
-            // We'll make a new one.
-            json acc_bridge;
-
-            // Store the play token and account ID in the new account bridge.
-            acc_bridge[play_token] = to_string(do_id);
-
-            // Close the read stream.
-            acc_read.close();
-
-            // Save the account bridge.
-            fstream acc_write;
-            acc_write.open(m_database_file, ios_base::out);
-            acc_write << setw(4) << acc_bridge << endl;
-
-            // Close the write stream.
-            acc_write.close();
-        }
-        else {
-            // Our account bridge exists, so let's read it.
-            json acc_bridge = json::parse(acc_read);
-
-            // Store the play token and account ID in the account bridge.
-            acc_bridge[play_token] = to_string(do_id);
-
-            // Close the read stream.
-            acc_read.close();
-
-            // Save the account bridge.
-            fstream acc_write;
-            acc_write.open(m_database_file, ios_base::out);
-            acc_write << setw(4) << acc_bridge << endl;
-
-            // Close the write stream.
-            acc_write.close();
-        }
-
-        // Erase the token context.
-        m_token_contexts.erase(context);
-
-        // Load the account.
-        login_account(play_token, do_id);
-    }
-
-    // Client's Avatar object has been created.
-    virtual void handle_avatar_created(uint32_t context, doid_t do_id)
-    {
-        // Grab the information from the context map.
-        uint16_t echo_context = m_creation_av_contexts[context].echo_context;
-        string dna_string = m_creation_av_contexts[context].dna_string;
-        uint8_t index = m_creation_av_contexts[context].index;
-        set<uint32_t> av_set = m_creation_av_contexts[context].av_set;
-
-        // Prepare to pack a new ACCOUNT_AV_SET field.
-        DCPacker packer;
-        DCClass *account = g_dcf->get_class_by_name("Account");
-        DCField *field = account->get_field_by_name("ACCOUNT_AV_SET");
-        packer.raw_pack_uint16(field->get_number());
-
-        // First, pack the old Avatar set.
-        packer.begin_pack(field);
-        packer.push();
-
-        // Loop over our Avatar set and pack each of the six IDs.
-        for(uint16_t x{}; x < 6; ++x) {
-            uint32_t av_id = *next(av_set.begin(), x);
-
-            // Pack the AV ID.
-            packer.pack_uint(av_id);
-        }
-
-        // Stop packing.
-        packer.pop();
-        packer.end_pack();
-
-        // Now, pack the new one...
-        packer.begin_pack(field);
-        packer.push();
-
-        // Loop over our Avatar set and pack each of the six IDs.
-        set<uint32_t> new_av_set;
-        for(uint16_t x{}; x < 6; ++x) {
-            uint32_t av_id = *next(av_set.begin(), x);
-            if(x == index) {
-                // This is our index. Replace the old ID with the new one.
-                av_id = (uint32_t)do_id;
-            }
-
-            // Pack the AV ID.
-            packer.pack_uint(av_id);
-
-            // Update the new Avatar set as well.
-            new_av_set.insert(av_id);
-        }
-
-        // Update the Avatar set in the context struct.
-        m_creation_av_contexts[context].av_set = new_av_set;
-
-        // Stop packing.
-        packer.pop();
-        packer.end_pack();
-
-        // Update the Account object's ACCOUNT_AV_SET field.
-        DatagramPtr dg = Datagram::create();
-        dg->add_server_header(m_database_id, m_channel, DBSERVER_OBJECT_SET_FIELD_IF_EQUALS);
-        dg->add_uint32(context);
-        dg->add_uint32(m_channel >> 32);
-        dg->add_data(packer.get_string());
-        route_datagram(dg);
-    }
-
-    // The ACCOUNT_AV_SET field was updated.
+    // Field(s) were updated by us.
     virtual void handle_set_field_resp(DatagramIterator &dgi)
     {
         // Collect the context and success.
-        uint32_t context = dgi.read_uint32();
+        uint32_t ctx = dgi.read_uint32();
         uint8_t success = dgi.read_uint8();
 
-        // Check the context to make sure it's valid.
-        if(m_creation_av_contexts.find(context) == m_creation_av_contexts.end()) {
-            // We aren't aware of this context...
-            stringstream ss;
-            ss << "Received a set field response with an unknown context.";
-            send_disconnect(CLIENT_DISCONNECT_MISSING_OBJECT, ss.str(), true);
-            return;
+        // Call back the operator.
+        if(g_client_manager->m_context_operator.find(ctx) != g_client_manager->m_context_operator.end()) {
+            g_client_manager->m_context_operator[ctx]->handle_update(ctx, success);
         }
+    }
 
-        // Grab the information from the context struct.
-        uint16_t echo_context = m_creation_av_contexts[context].echo_context;
-        string dna_string = m_creation_av_contexts[context].dna_string;
-        uint8_t index = m_creation_av_contexts[context].index;
-        set<uint32_t> av_set = m_creation_av_contexts[context].av_set;
+    // handle_get_field_resp occurs when the DB server sends a DBSERVER_OBJECT_GET_ALL_RESP.
+    virtual void handle_get_field_resp(DatagramIterator &dgi)
+    {
+        // Collect the information the DB server sent us.
+        uint32_t ctx = dgi.read_uint32();
+        uint8_t success = dgi.read_uint8();
 
-        // Grab the AV ID from the AV set.
-        uint32_t av_id = 0;
-        for(uint16_t x{}; x < 6; ++x) {
-            if(x == index) {
-                av_id = *next(av_set.begin(), x);
+        DCPacker unpacker;
+
+        // Call back the operator if we didn't succeed.
+        if(!success) {
+            if(g_client_manager->m_context_operator.find(ctx) != g_client_manager->m_context_operator.end()) {
+                g_client_manager->m_context_operator[ctx]->handle_query(ctx, 0, unpacker);
             }
         }
 
-        // Our return code should be zero by default.
-        uint8_t return_code = 0;
+        uint16_t dclass_id = dgi.read_uint16();
 
-        // Check if the set field succeeded.
-        if(!success) {
-            // The field was not set successfully. Our return code will be 1 to indicate failure.
-            return_code = 1;
+        unpacker.set_unpack_data(dgi.get_remaining_bytes());
+
+        if(g_client_manager->m_context_operator.find(ctx) != g_client_manager->m_context_operator.end()) {
+            g_client_manager->m_context_operator[ctx]->handle_query(ctx, dclass_id, unpacker);
         }
-
-        // Check if our AV ID is valid.
-        if(!av_id) {
-            // This should be impossible...
-            return_code = 1;
-        }
-
-        // Erase the context.
-        m_creation_av_contexts.erase(context);
-
-        // Finally, send the avatar creation response to the client.
-        DatagramPtr resp = Datagram::create();
-        resp->add_uint16(CLIENT_CREATE_AVATAR_RESP);
-        resp->add_uint16(echo_context);
-        resp->add_uint8(return_code);
-        resp->add_uint32(av_id);
-        m_client->send_datagram(resp);
-    }
-
-    virtual void login_toontown_response(uint8_t return_code, string return_str,
-                                         string play_token, uint32_t do_id)
-    {
-        DatagramPtr resp = Datagram::create();
-        resp->add_uint16(CLIENT_LOGIN_TOONTOWN_RESP);
-        resp->add_uint8(0);
-        resp->add_string("");
-        resp->add_uint32(do_id);
-        resp->add_string(play_token);
-        resp->add_uint8(1);
-        resp->add_string("YES");
-        resp->add_string("YES");
-        resp->add_string("NULL");
-        resp->add_uint32(time(0));
-        resp->add_uint32(clock());
-        resp->add_string("FULL");
-        resp->add_string("YES");
-        resp->add_string("-1");
-        resp->add_int32(0);
-        resp->add_string("NO_PARENT_ACCOUNT");
-        resp->add_string(play_token);
-        m_client->send_datagram(resp);
     }
 
     // Custom handling for internally received datagrams.
@@ -814,10 +507,13 @@ class DisneyClient : public Client, public NetworkHandler
         case DBSERVER_CREATE_OBJECT_RESP:
             handle_create_object_resp(dgi);
             break;
-        case DBSERVER_OBJECT_GET_FIELD_RESP:
+        case DBSERVER_OBJECT_GET_ALL_RESP:
             handle_get_field_resp(dgi);
             break;
         case DBSERVER_OBJECT_SET_FIELD_IF_EQUALS_RESP:
+            handle_set_field_resp(dgi);
+            break;
+        case DBSERVER_OBJECT_SET_FIELDS_IF_EQUALS_RESP:
             handle_set_field_resp(dgi);
             break;
         default:
@@ -841,9 +537,37 @@ class DisneyClient : public Client, public NetworkHandler
             m_client->disconnect();
         }
         break;
-        case CLIENT_LOGIN_TOONTOWN:
-            handle_client_login_toontown(dgi);
-            break;
+        case CLIENT_LOGIN_2: {
+            string play_token = dgi.read_string();
+            string version = dgi.read_string();
+            uint32_t dc_hash = dgi.read_uint32();
+            int32_t token_type = dgi.read_int32();
+            dgi.skip(sizeof(string)); // validate download
+            string want_magic_words = dgi.read_string();
+
+            g_client_manager->login(*this, play_token, m_channel, version,
+                                    dc_hash, token_type, want_magic_words);
+        }
+        break;
+        case CLIENT_LOGIN_TOONTOWN: {
+            if(m_game_name != "toon") {
+                // We aren't running in Toontown mode. Disconnect.
+                stringstream ss;
+                ss << "Message type " << msg_type << " cannot be sent when not in Toontown mode.";
+                send_disconnect(CLIENT_DISCONNECT_INVALID_MSGTYPE, ss.str(), true);
+                return;
+            }
+
+            string play_token = dgi.read_string();
+            string version = dgi.read_string();
+            uint32_t dc_hash = dgi.read_uint32();
+            int32_t token_type = dgi.read_int32();
+            string want_magic_words = dgi.read_string();
+
+            g_client_manager->login(*this, play_token, m_channel, version,
+                                    dc_hash, token_type, want_magic_words);
+        }
+        break;
         case CLIENT_OBJECT_UPDATE_FIELD:
             handle_client_object_update_field(dgi);
             break;
@@ -879,7 +603,7 @@ class DisneyClient : public Client, public NetworkHandler
             handle_client_object_location(dgi);
             break;
         case CLIENT_SET_AVATAR:
-            handle_client_set_avatar(dgi);
+            //handle_client_set_avatar(dgi);
             break;
         case CLIENT_GET_FRIEND_LIST:
             break;
@@ -890,16 +614,16 @@ class DisneyClient : public Client, public NetworkHandler
             handle_client_remove_interest(dgi);
             break;
         case CLIENT_CREATE_AVATAR:
-            handle_client_create_avatar(dgi);
+            //handle_client_create_avatar(dgi);
             break;
         case CLIENT_SET_NAME_PATTERN:
-            handle_client_set_name_pattern(dgi);
+            //handle_client_set_name_pattern(dgi);
             break;
         case CLIENT_SET_WISHNAME:
-            handle_client_set_wishname(dgi);
+            //handle_client_set_wishname(dgi);
             break;
         case CLIENT_GET_AVATARS:
-            handle_client_get_avatars(dgi);
+            //handle_client_get_avatars(dgi);
             break;
         case CLIENT_HEARTBEAT:
             handle_client_heartbeat();
@@ -910,814 +634,6 @@ class DisneyClient : public Client, public NetworkHandler
             send_disconnect(CLIENT_DISCONNECT_INVALID_MSGTYPE, ss.str(), true);
             return;
         }
-    }
-
-    // handle_client_get_avatars occurs when a client sends a CLIENT_GET_AVATARS.
-    virtual void handle_client_get_avatars(DatagramIterator &dgi)
-    {
-        // Begin constructing a response datagram of avatars.
-        DatagramPtr resp = Datagram::create();
-        resp->add_uint16(CLIENT_GET_AVATARS_RESP);
-
-        // TODO: Add avatar creation.
-        resp->add_uint8(0);
-        resp->add_uint16(0);
-        m_client->send_datagram(resp);
-    }
-
-    // handle_client_set_avatar occurs when a client sends a CLIENT_SET_AVATAR.
-    virtual void handle_client_set_avatar(DatagramIterator &dgi)
-    {
-        // Get the Avatar ID.
-        uint32_t av_id = dgi.read_uint32();
-
-        // Activate the Avatar on the DBSS.
-        DatagramPtr dg = Datagram::create();
-        dg->add_server_header(av_id, m_channel, DBSS_OBJECT_ACTIVATE_WITH_DEFAULTS);
-        dg->add_uint32(av_id);
-        dg->add_uint32(0);
-        dg->add_uint32(0);
-        route_datagram(dg);
-
-        DatagramPtr ldg = Datagram::create();
-        ldg->add_server_header(av_id, m_channel, STATESERVER_OBJECT_SET_LOCATION);
-        ldg->add_uint32(0);
-        ldg->add_uint32(0);
-        route_datagram(ldg);
-
-        // Add the Avatar as a session object.
-        m_session_objects.insert(av_id);
-
-        // Set ourselves as the owner of the Avatar.
-        DatagramPtr own_dg = Datagram::create();
-        own_dg->add_server_header(av_id, m_channel, STATESERVER_OBJECT_SET_OWNER);
-        own_dg->add_uint64(m_channel);
-        route_datagram(own_dg);
-    }
-
-    // handle_client_set_name_pattern occurs when a client sends a CLIENT_SET_NAME_PATTERN.
-    virtual void handle_client_set_name_pattern(DatagramIterator &dgi)
-    {
-        // Collect the information we need from the datagram.
-        uint32_t av_id = dgi.read_uint32();
-        int16_t first_index = dgi.read_int16();
-        int16_t first_flag = dgi.read_int16();
-        int16_t second_index = dgi.read_int16();
-        int16_t second_flag = dgi.read_int16();
-        int16_t third_index = dgi.read_int16();
-        int16_t third_flag = dgi.read_int16();
-        int16_t fourth_index = dgi.read_int16();
-        int16_t fourth_flag = dgi.read_int16();
-
-        // Send the response.
-        DatagramPtr resp = Datagram::create();
-        resp->add_uint16(CLIENT_SET_NAME_PATTERN_ANSWER);
-        resp->add_uint32(av_id);
-        resp->add_uint8(0);
-        m_client->send_datagram(resp);
-    }
-
-    // handle_client_set_wishname occurs when a client sends a CLIENT_SET_WISHNAME.
-    virtual void handle_client_set_wishname(DatagramIterator &dgi)
-    {
-        // Collect the information we need from the datagram.
-        uint32_t av_id = dgi.read_uint32();
-        string wish_name = dgi.read_string();
-
-        // Send the response.
-        DatagramPtr resp = Datagram::create();
-        resp->add_uint16(CLIENT_SET_WISHNAME_RESP);
-        resp->add_uint32(av_id);
-        resp->add_uint16(0);
-        resp->add_string("");
-        resp->add_string("Toon");
-        resp->add_string("");
-        m_client->send_datagram(resp);
-    }
-
-    // handle_client_create_avatar occurs when a client sends a CLIENT_CREATE_AVATAR.
-    virtual void handle_client_create_avatar(DatagramIterator &dgi)
-    {
-        // Collect the information we need from the datagram.
-        uint16_t echo_context = dgi.read_uint16();
-        string dna_string = dgi.read_string();
-        uint8_t index = dgi.read_uint8();
-
-        // Before anything else, we need to query the Account through the DB server.
-        // We will need to create a context for when we receive a response
-        // from the DB server.
-        uint32_t context = m_context++;
-        m_create_av_contexts[context];
-        m_create_av_contexts[context].echo_context = echo_context;
-        m_create_av_contexts[context].dna_string = dna_string;
-        m_create_av_contexts[context].index = index;
-
-        // Grab the DC field for ACCOUNT_AV_SET, which contains the list of avatar IDs
-        // belonging to this Account.
-        DCClass *account = g_dcf->get_class_by_name("Account");
-        DCField *field = account->get_field_by_name("ACCOUNT_AV_SET");
-
-        // Now, query the Account for the ACCOUNT_AV_SET field.
-        DatagramPtr dg = Datagram::create();
-        dg->add_server_header(m_database_id, m_channel, DBSERVER_OBJECT_GET_FIELD);
-        dg->add_uint32(context);
-        dg->add_uint32(m_channel >> 32);
-        dg->add_uint16(field->get_number());
-        route_datagram(dg);
-    }
-
-    // handle_get_field_resp occurs when the DB server sends a DBSERVER_OBJECT_GET_FIELD_RESP.
-    virtual void handle_get_field_resp(DatagramIterator &dgi)
-    {
-        // Collect the information the DB server sent us.
-        uint32_t context = dgi.read_uint32();
-        uint8_t success = dgi.read_uint8();
-
-        // Make sure we're aware of this context.
-        if(m_create_av_contexts.find(context) == m_create_av_contexts.end()) {
-            // Not a context we're aware of...
-            stringstream ss;
-            ss << "Failed to fetch Avatar fields. (unknown context)";
-            send_disconnect(CLIENT_DISCONNECT_MISSING_OBJECT, ss.str(), true);
-            return;
-        }
-
-        if(!success) {
-            // The DB server couldn't successfully fetch the fields. Give up.
-            stringstream ss;
-            ss << "Failed to fetch Avatar fields. (database failure)";
-            send_disconnect(CLIENT_DISCONNECT_MISSING_OBJECT, ss.str(), false);
-            return;
-        }
-
-        // Fetch the index from the context set.
-        uint16_t echo_context = m_create_av_contexts[context].echo_context;
-        string dna_string = m_create_av_contexts[context].dna_string;
-        uint8_t index = m_create_av_contexts[context].index;
-
-        // Now, unpack the ACCOUNT_AV_SET we were given using a DCPacker.
-        DCPacker packer;
-        DCClass *account = g_dcf->get_class_by_name("Account");
-        DCClass *avatar = g_dcf->get_class_by_name("DistributedToon");
-        packer.set_unpack_data(dgi.get_remaining_bytes());
-        int16_t field_id = packer.raw_unpack_int16();
-        DCField *field = account->get_field_by_index(field_id);
-        packer.begin_unpack(field);
-
-        // Fetch each Avatar index.
-        set<uint32_t> av_set;
-        for(uint16_t x{}; x < 6; ++x) {
-            uint32_t av_id = packer.unpack_uint();
-            if(av_id > 0 && x == index) {
-                // The index which is wanted has already been taken...
-                stringstream ss;
-                ss << "Avatar index " << index << " has already been taken.";
-                send_disconnect(CLIENT_DISCONNECT_FIELD_CONSTRAINT, ss.str(), false);
-                return;
-            }
-
-            av_set.insert(av_id);
-        }
-
-        // We're done unpacking.
-        packer.end_unpack();
-
-        // Make a new DCPacker for the Avatar fields.
-        DCPacker av_packer;
-
-        // Get the Toon head color and animal type from the DNA string.
-        uint8_t head_index = 0;
-        uint8_t head_color = 0;
-        try {
-            DatagramPtr dna_dg = Datagram::create(dna_string);
-            DatagramIterator dna_dgi = DatagramIterator(dna_dg);
-            dna_dgi.get_fixed_string(1);
-            uint8_t head_index = dna_dgi.read_uint8();
-            dna_dgi.skip(sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint8_t) +
-                         sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint8_t) +
-                         sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint8_t) +
-                         sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint8_t));
-            uint8_t head_color = dna_dgi.read_uint8();
-        } catch(const DatagramIteratorEOF&) {
-            // Our net string is not valid. Disconnect.
-            stringstream ss;
-            ss << "Received an invalid DNA net string.";
-            send_disconnect(CLIENT_DISCONNECT_FIELD_CONSTRAINT, ss.str(), true);
-            return;
-        }
-        string animal = "";
-        string color = "";
-
-        // Determine the animal.
-        if(head_index < 4) {
-            animal = " Dog";
-        }
-        else if(head_index < 8) {
-            animal = " Cat";
-        }
-        else if(head_index < 12) {
-            animal = " Horse";
-        }
-        else if(head_index < 14) {
-            animal = " Mouse";
-        }
-        else if(head_index < 18) {
-            animal = " Rabbit";
-        }
-        else if(head_index < 22) {
-            animal = " Duck";
-        }
-        else if(head_index < 26) {
-            animal = " Monkey";
-        }
-        else if(head_index < 30) {
-            animal = " Bear";
-        }
-        else if(head_index > 30) {
-            animal = " Pig";
-        }
-
-        // Determine the color.
-        if(head_color == 0) {
-            color = "White";
-        }
-        else if(head_color == 1) {
-            color = "Peach";
-        }
-        else if(head_color == 2) {
-            color = "Bright Red";
-        }
-        else if(head_color == 3) {
-            color = "Red";
-        }
-        else if(head_color == 4) {
-            color = "Maroon";
-        }
-        else if(head_color == 5) {
-            color = "Sienna";
-        }
-        else if(head_color == 6) {
-            color = "Brown";
-        }
-        else if(head_color == 7) {
-            color = "Tan";
-        }
-        else if(head_color == 8) {
-            color = "Coral";
-        }
-        else if(head_color == 9) {
-            color = "Orange";
-        }
-        else if(head_color == 10) {
-            color = "Yellow";
-        }
-        else if(head_color == 11) {
-            color = "Cream";
-        }
-        else if(head_color == 12) {
-            color = "Citrine";
-        }
-        else if(head_color == 13) {
-            color = "Lime";
-        }
-        else if(head_color == 14) {
-            color = "Sea Green";
-        }
-        else if(head_color == 15) {
-            color = "Green";
-        }
-        else if(head_color == 16) {
-            color = "Light Blue";
-        }
-        else if(head_color == 17) {
-            color = "Aqua";
-        }
-        else if(head_color == 18) {
-            color = "Blue";
-        }
-        else if(head_color == 19) {
-            color = "Periwinkle";
-        }
-        else if(head_color == 20) {
-            color = "Royal Blue";
-        }
-        else if(head_color == 21) {
-            color = "Slate Blue";
-        }
-        else if(head_color == 22) {
-            color = "Purple";
-        }
-        else if(head_color == 23) {
-            color = "Lavender";
-        }
-        else if(head_color == 24) {
-            color = "Pink";
-        }
-        else if(head_color == 25) {
-            color = "Plum";
-        }
-        else if(head_color == 26) {
-            color = "Black";
-        }
-
-        // Add the color and animal together to create the temporary name.
-        string av_name = color + animal;
-
-        // Make sure our name is valid.
-        if(av_name.length() < 1) {
-            stringstream ss;
-            ss << "Received an invalid DNA net string (when setting the temporary name).";
-            send_disconnect(CLIENT_DISCONNECT_FIELD_CONSTRAINT, ss.str(), true);
-            return;
-        }
-
-        // Pack the default value for setName.
-        DCField *name_field = avatar->get_field_by_name("setName");
-        pack_string(av_packer, name_field, av_name);
-
-        // Pack the default value for WishNameState.
-        DCField *wish_state_field = avatar->get_field_by_name("WishNameState");
-        pack_string(av_packer, wish_state_field, "OPEN");
-
-        // Pack the default value for WishName.
-        DCField *wish_name_field = avatar->get_field_by_name("WishName");
-        pack_string(av_packer, wish_name_field, "");
-
-        // Pack the DNA string.
-        DCField *dna_field = avatar->get_field_by_name("setDNAString");
-        pack_string(av_packer, dna_field, dna_string);
-
-        // Pack the account ID.
-        DCField *disl_field = avatar->get_field_by_name("setDISLid");
-        pack_uint(av_packer, disl_field, m_channel >> 32);
-
-        // Now, in comes an excessive amount of code.
-        // Iterating over DB fields and packing their default value will
-        // not work, as some fields require custom values.
-        // We need to pack custom default values for each avatar field.
-        pack_string(av_packer, avatar->get_field_by_name("setAccountName"), "");
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setFriendsList")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setFriendsList"));
-        av_packer.push();
-        av_packer.pack_default_value();
-        av_packer.pop();
-        av_packer.end_pack();
-        pack_uint(av_packer, avatar->get_field_by_name("setPreviousAccess"), 0);
-        pack_uint(av_packer, avatar->get_field_by_name("setGM"), 0);
-        pack_int(av_packer, avatar->get_field_by_name("setMaxBankMoney"), 12000);
-        pack_int(av_packer, avatar->get_field_by_name("setBankMoney"), 0);
-        pack_int(av_packer, avatar->get_field_by_name("setMaxMoney"), 40);
-        pack_int(av_packer, avatar->get_field_by_name("setMoney"), 0);
-        pack_int(av_packer, avatar->get_field_by_name("setMaxHp"), 15);
-        pack_int(av_packer, avatar->get_field_by_name("setHp"), 15);
-        pack_string(av_packer, avatar->get_field_by_name("setExperience"), "\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00");
-        pack_uint(av_packer, avatar->get_field_by_name("setMaxCarry"), 20);
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setTrackAccess")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setTrackAccess"));
-        av_packer.push();
-        av_packer.push();
-        av_packer.pack_uint(0);
-        av_packer.pack_uint(0);
-        av_packer.pack_uint(0);
-        av_packer.pack_uint(0);
-        av_packer.pack_uint(1);
-        av_packer.pack_uint(1);
-        av_packer.pack_uint(0);
-        av_packer.pop();
-        av_packer.pop();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setTrackProgress")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setTrackProgress"));
-        av_packer.push();
-        av_packer.pack_int(-1);
-        av_packer.pack_uint(0);
-        av_packer.pop();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setTrackBonusLevel")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setTrackBonusLevel"));
-        av_packer.push();
-        av_packer.push();
-        for(uint16_t x{}; x < 7; ++x) {
-            av_packer.pack_int(-1);
-        }
-        av_packer.pop();
-        av_packer.pop();
-        av_packer.end_pack();
-        pack_string(av_packer, avatar->get_field_by_name("setInventory"), "\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x01\\x00\\x00\\x00\\x00\\x00\\x00\\x01\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00");
-        pack_uint(av_packer, avatar->get_field_by_name("setMaxNPCFriends"), 16);
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setNPCFriendsDict")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setNPCFriendsDict"));
-        av_packer.pack_default_value();
-        av_packer.end_pack();
-        pack_uint(av_packer, avatar->get_field_by_name("setDefaultShard"), 0);
-        pack_uint(av_packer, avatar->get_field_by_name("setDefaultZone"), 0);
-        pack_string(av_packer, avatar->get_field_by_name("setShtickerBook"), "");
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setZonesVisited")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setZonesVisited"));
-        av_packer.push();
-        av_packer.push();
-        av_packer.pack_uint(2000);
-        av_packer.pop();
-        av_packer.pop();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setHoodsVisited")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setHoodsVisited"));
-        av_packer.push();
-        av_packer.push();
-        av_packer.pack_uint(2000);
-        av_packer.pop();
-        av_packer.pop();
-        av_packer.end_pack();
-        pack_string(av_packer, avatar->get_field_by_name("setInterface"), "");
-        pack_uint(av_packer, avatar->get_field_by_name("setLastHood"), 0);
-        pack_uint(av_packer, avatar->get_field_by_name("setTutorialAck"), 1);
-        pack_uint(av_packer, avatar->get_field_by_name("setMaxClothes"), 10);
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setClothesTopsList")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setClothesTopsList"));
-        av_packer.pack_default_value();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setClothesBottomsList")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setClothesBottomsList"));
-        av_packer.pack_default_value();
-        av_packer.end_pack();
-        pack_uint(av_packer, avatar->get_field_by_name("setMaxAccessories"), 0);
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setHatList")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setHatList"));
-        av_packer.pack_default_value();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setGlassesList")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setGlassesList"));
-        av_packer.pack_default_value();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setBackpackList")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setBackpackList"));
-        av_packer.pack_default_value();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setShoesList")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setShoesList"));
-        av_packer.pack_default_value();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setHat")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setHat"));
-        av_packer.push();
-        for(uint16_t x{}; x < 3; ++x) {
-            av_packer.pack_uint(0);
-        }
-        av_packer.pop();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setGlasses")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setGlasses"));
-        av_packer.push();
-        for(uint16_t x{}; x < 3; ++x) {
-            av_packer.pack_uint(0);
-        }
-        av_packer.pop();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setBackpack")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setBackpack"));
-        av_packer.push();
-        for(uint16_t x{}; x < 3; ++x) {
-            av_packer.pack_uint(0);
-        }
-        av_packer.pop();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setShoes")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setShoes"));
-        av_packer.push();
-        for(uint16_t x{}; x < 3; ++x) {
-            av_packer.pack_uint(0);
-        }
-        av_packer.pop();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setGardenSpecials")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setGardenSpecials"));
-        av_packer.pack_default_value();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setEmoteAccess")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setEmoteAccess"));
-        av_packer.push();
-        av_packer.push();
-        for(uint16_t x{}; x < 5; ++x) {
-            av_packer.pack_uint(1);
-        }
-        for(uint16_t x{}; x < 15; ++x) {
-            av_packer.pack_uint(0);
-        }
-        av_packer.pop();
-        av_packer.pop();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setCustomMessages")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setCustomMessages"));
-        av_packer.pack_default_value();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setResistanceMessages")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setResistanceMessages"));
-        av_packer.pack_default_value();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setPetTrickPhrases")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setPetTrickPhrases"));
-        av_packer.push();
-        av_packer.push();
-        av_packer.pack_uint(0);
-        av_packer.pop();
-        av_packer.pop();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setCatalogSchedule")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setCatalogSchedule"));
-        av_packer.push();
-        for(uint16_t x{}; x < 2; ++x) {
-            av_packer.pack_uint(0);
-        }
-        av_packer.pop();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setCatalog")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setCatalog"));
-        av_packer.pack_default_value();
-        av_packer.end_pack();
-        pack_string(av_packer, avatar->get_field_by_name("setMailboxContents"), "");
-        pack_string(av_packer, avatar->get_field_by_name("setDeliverySchedule"), "");
-        pack_string(av_packer, avatar->get_field_by_name("setGiftSchedule"), "");
-        pack_string(av_packer, avatar->get_field_by_name("setAwardMailboxContents"), "");
-        pack_string(av_packer, avatar->get_field_by_name("setAwardSchedule"), "");
-        pack_uint(av_packer, avatar->get_field_by_name("setAwardNotify"), 0);
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setCatalogNotify")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setCatalogNotify"));
-        av_packer.push();
-        av_packer.pack_uint(0);
-        av_packer.pack_uint(0);
-        av_packer.pop();
-        av_packer.end_pack();
-        pack_uint(av_packer, avatar->get_field_by_name("setSpeedChatStyleIndex"), 1);
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setTeleportAccess")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setTeleportAccess"));
-        av_packer.pack_default_value();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setCogStatus")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setCogStatus"));
-        av_packer.push();
-        av_packer.push();
-        for(uint16_t x{}; x < 32; ++x) {
-            av_packer.pack_uint(1);
-        }
-        av_packer.pop();
-        av_packer.pop();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setCogCount")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setCogCount"));
-        av_packer.push();
-        av_packer.push();
-        for(uint16_t x{}; x < 32; ++x) {
-            av_packer.pack_uint(0);
-        }
-        av_packer.pop();
-        av_packer.pop();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setCogRadar")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setCogRadar"));
-        av_packer.push();
-        av_packer.push();
-        for(uint16_t x{}; x < 4; ++x) {
-            av_packer.pack_uint(0);
-        }
-        av_packer.pop();
-        av_packer.pop();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setBuildingRadar")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setBuildingRadar"));
-        av_packer.push();
-        av_packer.push();
-        for(uint16_t x{}; x < 4; ++x) {
-            av_packer.pack_uint(0);
-        }
-        av_packer.pop();
-        av_packer.pop();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setCogLevels")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setCogLevels"));
-        av_packer.push();
-        av_packer.push();
-        for(uint16_t x{}; x < 4; ++x) {
-            av_packer.pack_uint(0);
-        }
-        av_packer.pop();
-        av_packer.pop();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setCogTypes")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setCogTypes"));
-        av_packer.push();
-        av_packer.push();
-        for(uint16_t x{}; x < 4; ++x) {
-            av_packer.pack_uint(0);
-        }
-        av_packer.pop();
-        av_packer.pop();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setCogParts")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setCogParts"));
-        av_packer.push();
-        av_packer.push();
-        for(uint16_t x{}; x < 4; ++x) {
-            av_packer.pack_uint(0);
-        }
-        av_packer.pop();
-        av_packer.pop();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setCogMerits")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setCogMerits"));
-        av_packer.push();
-        av_packer.push();
-        for(uint16_t x{}; x < 4; ++x) {
-            av_packer.pack_uint(0);
-        }
-        av_packer.pop();
-        av_packer.pop();
-        av_packer.end_pack();
-        pack_uint(av_packer, avatar->get_field_by_name("setHouseId"), 0);
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setQuests")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setQuests"));
-        av_packer.pack_default_value();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setQuestHistory")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setQuestHistory"));
-        av_packer.pack_default_value();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setRewardHistory")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setRewardHistory"));
-        av_packer.push();
-        av_packer.pack_uint(0);
-        av_packer.push();
-        av_packer.pop();
-        av_packer.pop();
-        av_packer.end_pack();
-        pack_uint(av_packer, avatar->get_field_by_name("setQuestCarryLimit"), 1);
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setCheesyEffect")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setCheesyEffect"));
-        av_packer.push();
-        av_packer.pack_int(0);
-        for(uint16_t x{}; x < 2; ++x) {
-            av_packer.pack_uint(0);
-        }
-        av_packer.pop();
-        av_packer.end_pack();
-        pack_uint(av_packer, avatar->get_field_by_name("setPosIndex"), 0);
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setFishCollection")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setFishCollection"));
-        av_packer.pack_default_value();
-        av_packer.end_pack();
-        pack_uint(av_packer, avatar->get_field_by_name("setMaxFishTank"), 20);
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setFishTank")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setFishTank"));
-        av_packer.pack_default_value();
-        av_packer.end_pack();
-        pack_uint(av_packer, avatar->get_field_by_name("setFishingRod"), 0);
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setFishingTrophies")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setFishingTrophies"));
-        av_packer.pack_default_value();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setFlowerCollection")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setFlowerCollection"));
-        av_packer.pack_default_value();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setFlowerBasket")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setFlowerBasket"));
-        av_packer.pack_default_value();
-        av_packer.end_pack();
-        pack_uint(av_packer, avatar->get_field_by_name("setMaxFlowerBasket"), 20);
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setGardenTrophies")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setGardenTrophies"));
-        av_packer.pack_default_value();
-        av_packer.end_pack();
-        pack_uint(av_packer, avatar->get_field_by_name("setShovel"), 0);
-        pack_uint(av_packer, avatar->get_field_by_name("setShovelSkill"), 0);
-        pack_uint(av_packer, avatar->get_field_by_name("setWateringCan"), 0);
-        pack_uint(av_packer, avatar->get_field_by_name("setWateringCanSkill"), 0);
-        pack_uint(av_packer, avatar->get_field_by_name("setPetId"), 0);
-        pack_uint(av_packer, avatar->get_field_by_name("setPetTutorialDone"), 0);
-        pack_uint(av_packer, avatar->get_field_by_name("setFishBingoTutorialDone"), 0);
-        pack_uint(av_packer, avatar->get_field_by_name("setFishBingoMarkTutorialDone"), 0);
-        pack_int(av_packer, avatar->get_field_by_name("setKartBodyType"), -1);
-        pack_int(av_packer, avatar->get_field_by_name("setKartBodyColor"), -1);
-        pack_int(av_packer, avatar->get_field_by_name("setKartAccessoryColor"), -1);
-        pack_int(av_packer, avatar->get_field_by_name("setKartEngineBlockType"), -1);
-        pack_int(av_packer, avatar->get_field_by_name("setKartSpoilerType"), -1);
-        pack_int(av_packer, avatar->get_field_by_name("setKartFrontWheelWellType"), -1);
-        pack_int(av_packer, avatar->get_field_by_name("setKartBackWheelWellType"), -1);
-        pack_int(av_packer, avatar->get_field_by_name("setKartRimType"), -1);
-        pack_int(av_packer, avatar->get_field_by_name("setKartDecalType"), -1);
-        pack_uint(av_packer, avatar->get_field_by_name("setTickets"), 200);
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setKartingHistory")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setKartingHistory"));
-        av_packer.push();
-        av_packer.push();
-        for(uint16_t x{}; x < 16; ++x) {
-            av_packer.pack_uint(0);
-        }
-        av_packer.pop();
-        av_packer.pop();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setKartingTrophies")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setKartingTrophies"));
-        av_packer.push();
-        av_packer.push();
-        for(uint16_t x{}; x < 33; ++x) {
-            av_packer.pack_uint(0);
-        }
-        av_packer.pop();
-        av_packer.pop();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setKartingPersonalBest")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setKartingPersonalBest"));
-        av_packer.push();
-        av_packer.push();
-        for(uint16_t x{}; x < 6; ++x) {
-            av_packer.pack_uint(0);
-        }
-        av_packer.pop();
-        av_packer.pop();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setKartingPersonalBest2")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setKartingPersonalBest2"));
-        av_packer.push();
-        av_packer.push();
-        for(uint16_t x{}; x < 12; ++x) {
-            av_packer.pack_uint(0);
-        }
-        av_packer.pop();
-        av_packer.pop();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setKartAccessoriesOwned")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setKartAccessoriesOwned"));
-        av_packer.push();
-        av_packer.push();
-        for(uint16_t x{}; x < 16; ++x) {
-            av_packer.pack_int(-1);
-        }
-        av_packer.pop();
-        av_packer.pop();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setCogSummonsEarned")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setCogSummonsEarned"));
-        av_packer.push();
-        av_packer.push();
-        for(uint16_t x{}; x < 32; ++x) {
-            av_packer.pack_uint(0);
-        }
-        av_packer.pop();
-        av_packer.pop();
-        av_packer.end_pack();
-        pack_uint(av_packer, avatar->get_field_by_name("setGardenStarted"), 0);
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setGolfHistory")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setGolfHistory"));
-        av_packer.push();
-        av_packer.push();
-        for(uint16_t x{}; x < 18; ++x) {
-            av_packer.pack_uint(0);
-        }
-        av_packer.pop();
-        av_packer.pop();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setPackedGolfHoleBest")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setPackedGolfHoleBest"));
-        av_packer.push();
-        av_packer.push();
-        for(uint16_t x{}; x < 18; ++x) {
-            av_packer.pack_uint(0);
-        }
-        av_packer.pop();
-        av_packer.pop();
-        av_packer.end_pack();
-        av_packer.raw_pack_uint16(avatar->get_field_by_name("setGolfCourseBest")->get_number());
-        av_packer.begin_pack(avatar->get_field_by_name("setGolfCourseBest"));
-        av_packer.push();
-        av_packer.push();
-        for(uint16_t x{}; x < 3; ++x) {
-            av_packer.pack_uint(0);
-        }
-        av_packer.pop();
-        av_packer.pop();
-        av_packer.end_pack();
-        pack_uint(av_packer, avatar->get_field_by_name("setPinkSlips"), 0);
-        pack_uint(av_packer, avatar->get_field_by_name("setNametagStyle"), 0);
-
-        // Create a new context.
-        uint32_t new_context = m_context++;
-        m_creation_av_contexts[new_context];
-        m_creation_av_contexts[new_context].echo_context = echo_context;
-        m_creation_av_contexts[new_context].dna_string = dna_string;
-        m_creation_av_contexts[new_context].index = index;
-        m_creation_av_contexts[new_context].av_set = av_set;
-
-        // Erase the old context.
-        m_create_av_contexts.erase(context);
-
-        // Create the Avatar object.
-        DatagramPtr dg = Datagram::create();
-        dg->add_server_header(m_database_id, m_channel, DBSERVER_CREATE_OBJECT);
-        dg->add_uint32(new_context);
-        dg->add_uint16(avatar->get_number());
-        dg->add_uint16(112);
-        dg->add_data(av_packer.get_string());
-        route_datagram(dg);
     }
 
     // handle_client_heartbeat should ensure this client does not get reset for the current interval.
