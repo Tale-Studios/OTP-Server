@@ -18,12 +18,239 @@ Operator::~Operator()
 {
 }
 
-void Operator::create_object(uint32_t database_id, DCClass *dclass, DCPacker &packer, uint16_t field_count)
+void Operator::pack_json_object(DCPacker &packer, string field_name, json &object)
+{
+    // Get the current pack type.
+    DCPackType pack_type = packer.get_pack_type();
+
+    // Slight hack: A few fields (Account ones, in particular) aren't atomic.
+    // This means PT_field won't come up first, which screws everything up.
+    // We can detect this by checking if pack_type != PT_field and
+    // seeing if stoi() fails on field_name (this could be checked better).
+    json value;
+    if(pack_type != PT_field) {
+        try {
+            stoi(field_name);
+            value = object[stoi(field_name)];
+        } catch(invalid_argument) {
+            value = object[field_name];
+        }
+    }
+
+    // Pack based on the expected pack type.
+    switch(pack_type)
+    {
+        case PT_double:
+            if(value.type() != nlohmann::detail::value_t::null) {
+                packer.pack_double(value);
+            }
+            break;
+        case PT_int64:
+            if(value.type() != nlohmann::detail::value_t::null) {
+                packer.pack_int64(value);
+            }
+            break;
+        case PT_uint64:
+            if(value.type() != nlohmann::detail::value_t::null) {
+                packer.pack_uint64(value);
+            }
+            break;
+        case PT_int:
+            if(value.type() != nlohmann::detail::value_t::null) {
+                packer.pack_int(value);
+            }
+            break;
+        case PT_uint:
+            if(value.type() != nlohmann::detail::value_t::null) {
+                packer.pack_uint(value);
+            }
+            break;
+        case PT_string:
+        case PT_blob:
+            if(value.type() != nlohmann::detail::value_t::null) {
+                packer.pack_string(value);
+            }
+            break;
+        case PT_array: {
+            packer.push();
+
+            for(size_t i = 0; i < value.size(); ++i) {
+                pack_json_object(packer, to_string(i), value);
+            }
+
+            packer.pop();
+        }
+        break;
+        case PT_field: {
+            packer.push();
+
+            for(size_t i = 0; i < object[field_name].size(); ++i) {
+                pack_json_object(packer, to_string(i), object[field_name]);
+            }
+
+            packer.pop();
+        }
+        break;
+        default:
+            break;
+    }
+}
+
+void Operator::pack_json_objects(DCPacker &packer, DCClass *dclass, json &object)
+{
+    // Iterate over each field.
+    for(auto& it : object.items()) {
+        // Pull the field.
+        DCField *field = dclass->get_field_by_name(it.key());
+        if(field == nullptr) {
+            warning("Bad field when packing JSON objects!");
+            return;
+        }
+
+        // Begin packing the field.
+        packer.raw_pack_uint16(field->get_number());
+        packer.begin_pack(field);
+
+        // Pack the object.
+        pack_json_object(packer, it.key(), object);
+
+        // Stop packing the field.
+        packer.end_pack();
+    }
+}
+
+void Operator::unpack_json_object(DCPacker &unpacker, string field_name, json &object)
+{
+    // Get the current pack type.
+    DCPackType pack_type = unpacker.get_pack_type();
+
+    // Slight hack: A few fields (Account ones, in particular) aren't atomic.
+    // This means PT_field won't come up first, which screws everything up.
+    // We can detect this by checking if pack_type != PT_field and
+    // seeing if stoi() fails on field_name (this could be checked better).
+    bool atomic = true;
+    if(pack_type != PT_field) {
+        try {
+            stoi(field_name);
+        } catch(invalid_argument) {
+            atomic = false;
+        }
+    }
+    else {
+        atomic = false;
+    }
+
+    // Unpack based on the expected pack type.
+    switch(pack_type)
+    {
+        case PT_invalid:
+            unpacker.unpack_skip();
+            break;
+        case PT_double:
+            if(atomic) {
+                object[stoi(field_name)] = unpacker.unpack_double();
+            } else {
+                object = unpacker.unpack_double();
+            }
+            break;
+        case PT_int64:
+            if(atomic) {
+                object[stoi(field_name)] = unpacker.unpack_int64();
+            } else {
+                object = unpacker.unpack_double();
+            }
+            break;
+        case PT_uint64:
+            if(atomic) {
+                object[stoi(field_name)] = unpacker.unpack_uint64();
+            } else {
+                object = unpacker.unpack_uint64();
+            }
+            break;
+        case PT_int:
+            if(atomic) {
+                object[stoi(field_name)] = unpacker.unpack_int();
+            } else {
+                object = unpacker.unpack_int();
+            }
+            break;
+        case PT_uint:
+            if(atomic) {
+                object[stoi(field_name)] = unpacker.unpack_uint();
+            } else {
+                object = unpacker.unpack_uint();
+            }
+            break;
+        case PT_string:
+        case PT_blob:
+            if(atomic) {
+                object[stoi(field_name)] = unpacker.unpack_string();
+            } else {
+                object = unpacker.unpack_string();
+            }
+            break;
+        default: {
+            unpacker.push();
+
+            size_t i = 0;
+            while(unpacker.more_nested_fields()) {
+                object[i] = nullptr;
+                unpack_json_object(unpacker, to_string(i), object);
+                ++i;
+            }
+
+            unpacker.pop();
+        }
+        break;
+    }
+}
+
+json Operator::unpack_json_objects(DatagramIterator &dgi, DCClass *dclass, size_t field_count)
+{
+    // Set up the unpacker with the data from the DGI.
+    DCPacker unpacker;
+    unpacker.set_unpack_data(dgi.get_remaining_bytes());
+
+    // Prepare our JSON fields object which will contain each field by its value.
+    json fields;
+
+    // Iterate over each field.
+    for(size_t i = 0; i < field_count; ++i) {
+        // First, unpack the field id.
+        int16_t field_id = unpacker.raw_unpack_int16();
+
+        // Get the field by its index.
+        DCField *field = dclass->get_field_by_index(field_id);
+        if(field == nullptr) {
+            warning("Bad field when unpacking JSON objects!");
+            return fields;
+        }
+
+        // Get the field name.
+        string field_name = field->get_name();
+
+        // Unpack.
+        unpacker.begin_unpack(field);
+        fields[field_name] = json::array();
+        unpack_json_object(unpacker, field_name, fields[field_name]);
+        unpacker.end_unpack();
+    }
+
+    // Return the fields.
+    return fields;
+}
+
+void Operator::create_object(uint32_t database_id, DCClass *dclass, json &fields)
 {
     // Save the context:
     unsigned int ctx = get_context();
     m_contexts.push_back(ctx);
     m_manager->m_context_operator[ctx] = this;
+
+    // Pack up/count valid fields.
+    uint16_t field_count = fields.size();
+    DCPacker packer;
+    pack_json_objects(packer, dclass, fields);
 
     // Now generate and send the datagram:
     DatagramPtr dg = Datagram::create();
@@ -62,7 +289,7 @@ void Operator::query_object(uint32_t database_id, uint32_t do_id)
     m_client.dispatch_datagram(dg);
 }
 
-void Operator::handle_query(uint32_t ctx, uint16_t dclass_id, DCPacker &unpacker)
+void Operator::handle_query(DatagramIterator &dgi, uint32_t ctx, uint16_t dclass_id)
 {
     if(find(m_contexts.begin(), m_contexts.end(), ctx) == m_contexts.end()) {
         warning(string("Received unexpected DBSERVER_OBJECT_GET_ALL_RESP (ctx ") + to_string(ctx) + ")");
@@ -70,10 +297,11 @@ void Operator::handle_query(uint32_t ctx, uint16_t dclass_id, DCPacker &unpacker
     }
 
     m_contexts.erase(remove(m_contexts.begin(), m_contexts.end(), ctx), m_contexts.end());
+    m_context_id.erase(ctx);
     m_manager->m_context_operator.erase(ctx);
 }
 
-void Operator::update_object(uint32_t database_id, uint32_t do_id, vector<DCField*> fields, vector<DCPacker> new_fields, vector<DCPacker> old_fields)
+void Operator::update_object(uint32_t database_id, uint32_t do_id, DCClass *dclass, json &new_fields, json &old_fields)
 {
     // Make sure if we have anything in our old fields vector the size is the same as the new fields vector:
     if(new_fields.size() != old_fields.size() && old_fields.size() != 0) {
@@ -82,22 +310,37 @@ void Operator::update_object(uint32_t database_id, uint32_t do_id, vector<DCFiel
     }
 
     DCPacker field_packer;
-    uint8_t field_count = 0;
-    for(DCField* f : fields) {
-        ++field_count;
-
-        field_packer.raw_pack_uint16(f->get_number());
-
-        if(old_fields.size() >= field_count) {
-            DCPacker old_field = old_fields[field_count];
-
-            // Pack the old field:
-            field_packer.append_data(old_field.get_data(), old_field.get_length());
+    uint16_t field_count = new_fields.size();
+    for(auto& it : new_fields.items()) {
+        DCField *field = dclass->get_field_by_name(it.key());
+        if(field == nullptr) {
+            warning("Bad field when packing JSON objects to update!");
+            return;
         }
 
-        DCPacker new_field = new_fields[field_count];
+        // Pack the field number.
+        field_packer.raw_pack_uint16(field->get_number());
 
-        field_packer.append_data(new_field.get_data(), new_field.get_length());
+        // Pack the old field values if we were given them.
+        if(old_fields.size() == new_fields.size()) {
+            // Pack the old values.
+            field_packer.begin_pack(field);
+
+            // Pack the object.
+            pack_json_object(field_packer, it.key(), old_fields);
+
+            // Stop packing.
+            field_packer.end_pack();
+        }
+
+        // Now, pack the new field.
+        field_packer.begin_pack(field);
+
+        // Pack the object.
+        pack_json_object(field_packer, it.key(), new_fields);
+
+        // Stop packing the field.
+        field_packer.end_pack();
     }
 
     // Generate and send the datagram:
@@ -335,35 +578,21 @@ void LoginOperation::handle_lookup(bool success, uint32_t account_id, string pla
 
 void LoginOperation::create_account()
 {
-    DCPacker packer;
-    DCClass *account = g_dcf->get_class_by_name("Account");
-    DCField *av_set_field = account->get_field_by_name("ACCOUNT_AV_SET");
-
-    // Pack ACCOUNT_AV_SET.
-    pack_int_field(packer, av_set_field, vector<uint32_t> {0, 0, 0, 0, 0, 0}, true);
-
-    // Pack ACCOUNT_AV_SET_DEL.
-    DCField *av_del_field = account->get_field_by_name("ACCOUNT_AV_SET_DEL");
-    pack_default_field(packer, av_del_field);
-
-    // Pack ESTATE_ID.
-    DCField *estate_field = account->get_field_by_name("ESTATE_ID");
-    pack_int_field(packer, estate_field, vector<uint32_t> {0}, false);
-
     // Calculate the current system time.
     auto end = chrono::system_clock::now();
     time_t end_time = chrono::system_clock::to_time_t(end);
 
-    // Pack CREATED.
-    DCField *created_field = account->get_field_by_name("CREATED");
-    pack_string_field(packer, created_field, vector<string> {ctime(&end_time)}, false);
-
-    // Pack LAST_LOGIN.
-    DCField *login_field = account->get_field_by_name("LAST_LOGIN");
-    pack_string_field(packer, created_field, vector<string> {ctime(&end_time)}, false);
+    // Put together the account fields.
+    json account = {
+        {"ACCOUNT_AV_SET", {0, 0, 0, 0, 0, 0}},
+        {"ESTATE_ID", 0},
+        {"ACCOUNT_AV_SET_DEL", {}},
+        {"CREATED", ctime(&end_time)},
+        {"LAST_LOGIN", ctime(&end_time)}
+    };
 
     // Create the Account object with the packed fields.
-    create_object(m_manager->m_database_id, account, packer, 5);
+    create_object(m_manager->m_database_id, g_dcf->get_class_by_name("Account"), account);
 }
 
 void LoginOperation::handle_create(uint32_t ctx, uint32_t do_id)
@@ -394,6 +623,7 @@ void LoginOperation::handle_create(uint32_t ctx, uint32_t do_id)
     m_manager->m_account_db->store_account_id(m_play_token, m_account_id);
 
     // Finally, we can set the account.
+    m_creating = false;
     set_account();
 }
 
@@ -402,9 +632,9 @@ void LoginOperation::retrieve_account()
     query_object(m_manager->m_database_id, m_account_id);
 }
 
-void LoginOperation::handle_query(uint32_t ctx, uint16_t dclass_id, DCPacker &unpacker)
+void LoginOperation::handle_query(DatagramIterator &dgi, uint32_t ctx, uint16_t dclass_id)
 {
-    Operator::handle_query(ctx, dclass_id, unpacker);
+    Operator::handle_query(dgi, ctx, dclass_id);
 
     DCClass *account = g_dcf->get_class_by_name("Account");
     if(account->get_number() != dclass_id) {
@@ -441,17 +671,10 @@ void LoginOperation::set_account()
     time_t end_time = chrono::system_clock::to_time_t(end);
 
     // Update the last login timestamp.
-    DCPacker packer;
-    DCClass *account = g_dcf->get_class_by_name("Account");
-    DCField *login_field = account->get_field_by_name("LAST_LOGIN");
-    pack_string_field(packer, login_field, vector<string> {ctime(&end_time)}, false);
-
-    // Set the field.
-    DatagramPtr dg = Datagram::create();
-    dg->add_server_header(m_manager->m_database_id, m_client.get_client_channel(), DBSERVER_OBJECT_SET_FIELD);
-    dg->add_uint32(m_account_id);
-    dg->add_data(packer.get_string());
-    m_client.dispatch_datagram(dg);
+    update_object(m_manager->m_database_id,
+                  m_account_id,
+                  g_dcf->get_class_by_name("Account"),
+                  json({{"LAST_LOGIN", ctime(&end_time)}}), json({}));
 
     // We're done.
     LoggedEvent event("account-login");
@@ -500,9 +723,9 @@ void AvatarOperation::retrieve_account()
     query_object(m_manager->m_database_id, (uint32_t)m_target);
 }
 
-void AvatarOperation::handle_query(uint32_t ctx, uint16_t dclass_id, DCPacker &unpacker)
+void AvatarOperation::handle_query(DatagramIterator &dgi, uint32_t ctx, uint16_t dclass_id)
 {
-    Operator::handle_query(ctx, dclass_id, unpacker);
+    Operator::handle_query(dgi, ctx, dclass_id);
 
     if(m_past_acc_query) {
         // We have already done this.
@@ -516,12 +739,12 @@ void AvatarOperation::handle_query(uint32_t ctx, uint16_t dclass_id, DCPacker &u
         return;
     }
 
-    // Save the account field unpacker.
-    m_field_unpacker = unpacker;
+    // Save the unpacked account fields.
+    uint16_t field_count = dgi.read_uint16();
+    m_account = unpack_json_objects(dgi, account, field_count);
 
-    // Unpack ACCOUNT_AV_SET.
-    DCField *av_field = account->get_field_by_name("ACCOUNT_AV_SET");
-    m_av_set = unpack_int_field(m_field_unpacker, av_field, 6);
+    // Save ACCOUNT_AV_SET.
+    m_av_set = m_account["ACCOUNT_AV_SET"].get<vector<uint32_t> >();
 
     // We're done; run the post account function.
     m_past_acc_query = true;
@@ -568,17 +791,26 @@ void GetAvatarsOperation::post_account_func()
     }
 }
 
-void GetAvatarsOperation::handle_query(uint32_t ctx, uint16_t dclass_id, DCPacker &unpacker)
+void GetAvatarsOperation::handle_query(DatagramIterator &dgi, uint32_t ctx, uint16_t dclass_id)
 {
-    AvatarOperation::handle_query(ctx, dclass_id, unpacker);
-
-    if(find(m_contexts.begin(), m_contexts.end(), ctx) == m_contexts.end()) {
-        // We don't know this context.
+    if(!m_past_acc_query) {
+        // It's not our turn yet.
+        AvatarOperation::handle_query(dgi, ctx, dclass_id);
         return;
     }
 
+    if(find(m_contexts.begin(), m_contexts.end(), ctx) == m_contexts.end()) {
+        // We don't know the context.
+        warning(string("Received unexpected DBSERVER_OBJECT_GET_ALL_RESP (ctx ") + to_string(ctx) + ")");
+        return;
+    }
+
+    // Extract the avatar ID.
     uint32_t av_id = m_context_id[ctx];
+
+    m_contexts.erase(remove(m_contexts.begin(), m_contexts.end(), ctx), m_contexts.end());
     m_context_id.erase(ctx);
+    m_manager->m_context_operator.erase(ctx);
 
     if(m_manager->m_player_class->get_number() != dclass_id) {
         // The dclass is invalid! Kill the connection.
@@ -587,9 +819,10 @@ void GetAvatarsOperation::handle_query(uint32_t ctx, uint16_t dclass_id, DCPacke
     }
 
     // Otherwise, we're all set!
-    // Store the unpacker, remove the avatar from the pending list,
+    // Store the JSON object, remove the avatar from the pending list,
     // and send the avatar list.
-    m_packed_fields[av_id] = unpacker;
+    uint16_t field_count = dgi.read_uint16();
+    m_avatar_fields[av_id] = unpack_json_objects(dgi, m_manager->m_player_class, field_count);
     m_pending_avatars.erase(remove(m_pending_avatars.begin(), m_pending_avatars.end(), av_id), m_pending_avatars.end());
     if(m_pending_avatars.size() < 1) {
         send_avatars();
@@ -599,7 +832,7 @@ void GetAvatarsOperation::handle_query(uint32_t ctx, uint16_t dclass_id, DCPacke
 void GetAvatarsOperation::send_avatars()
 {
     // Get PotentialAvatar structs from the client manager's potential avatar function.
-    vector<PotentialAvatar> potential_avatars = m_manager->get_potential_avatars(m_packed_fields, m_av_set);
+    vector<PotentialAvatar> potential_avatars = m_manager->get_potential_avatars(m_avatar_fields, m_av_set);
 
     // We're done; begin constructing a response datagram of potential avatars,
     // and then we can shut down this operation.
@@ -656,9 +889,9 @@ void CreateAvatarOperation::retrieve_account()
     query_object(m_manager->m_database_id, (uint32_t)m_target);
 }
 
-void CreateAvatarOperation::handle_query(uint32_t ctx, uint16_t dclass_id, DCPacker &unpacker)
+void CreateAvatarOperation::handle_query(DatagramIterator &dgi, uint32_t ctx, uint16_t dclass_id)
 {
-    Operator::handle_query(ctx, dclass_id, unpacker);
+    Operator::handle_query(dgi, ctx, dclass_id);
 
     DCClass *account = g_dcf->get_class_by_name("Account");
     if(account->get_number() != dclass_id) {
@@ -667,12 +900,11 @@ void CreateAvatarOperation::handle_query(uint32_t ctx, uint16_t dclass_id, DCPac
         return;
     }
 
-    // Save the account field unpacker.
-    m_field_unpacker = unpacker;
+    uint16_t field_count = dgi.read_uint16();
+    m_account = unpack_json_objects(dgi, account, field_count);
 
-    // Unpack ACCOUNT_AV_SET.
-    DCField *av_field = account->get_field_by_name("ACCOUNT_AV_SET");
-    m_av_set = unpack_int_field(m_field_unpacker, av_field, 6);
+    // Save ACCOUNT_AV_SET.
+    m_av_set = m_account["ACCOUNT_AV_SET"].get<vector<uint32_t> >();
 
     // Check if the index is open:
     if(m_av_set[m_index] > 0) {
@@ -711,24 +943,11 @@ void CreateAvatarOperation::store_avatar()
     vector<uint32_t> old_av_set(m_av_set);
     m_av_set[m_index] = m_av_id;
 
-    DCClass *account = g_dcf->get_class_by_name("Account");
-    DCField *field = account->get_field_by_name("ACCOUNT_AV_SET");
-
-    vector<DCField*> fields {field};
-    vector<DCPacker> new_fields;
-    vector<DCPacker> old_fields;
-
-    DCPacker new_packer;
-    DCPacker old_packer;
-
-    pack_int_field(new_packer, field, m_av_set, true, false);
-    pack_int_field(old_packer, field, old_av_set, true, false);
-
-    new_fields.push_back(new_packer);
-    old_fields.push_back(old_packer);
-
     // Update the object.
-    update_object(m_manager->m_database_id, (uint32_t)m_target, fields, new_fields, old_fields);
+    update_object(m_manager->m_database_id,
+                  (uint32_t)m_target,
+                  g_dcf->get_class_by_name("Account"),
+                  json({{"ACCOUNT_AV_SET", m_av_set}}), json({{"ACCOUNT_AV_SET", old_av_set}}));
 }
 
 void CreateAvatarOperation::handle_update(uint32_t ctx, uint8_t success)
@@ -793,9 +1012,9 @@ void AcknowledgeNameOperation::post_account_func()
     query_object(m_manager->m_database_id, m_av_id);
 }
 
-void AcknowledgeNameOperation::handle_query(uint32_t ctx, uint16_t dclass_id, DCPacker &unpacker)
+void AcknowledgeNameOperation::handle_query(DatagramIterator &dgi, uint32_t ctx, uint16_t dclass_id)
 {
-    AvatarOperation::handle_query(ctx, dclass_id, unpacker);
+    AvatarOperation::handle_query(dgi, ctx, dclass_id);
 
     if(m_manager->m_player_class->get_number() != dclass_id) {
         // This dclass is not a valid avatar! Kill the connection.
@@ -803,13 +1022,14 @@ void AcknowledgeNameOperation::handle_query(uint32_t ctx, uint16_t dclass_id, DC
         return;
     }
 
+    // Get the avatar fields.
+    uint16_t field_count = dgi.read_uint16();
+    json avatar = unpack_json_objects(dgi, m_manager->m_player_class, field_count);
+
     // Process the WishNameState change.
-    DCField *wish_name_state_field = m_manager->m_player_class->get_field_by_name("WishNameState");
-    string wish_name_state = unpack_string_field(unpacker, wish_name_state_field, 1).front();
-    DCField *wish_name_field = m_manager->m_player_class->get_field_by_name("WishName");
-    string wish_name = unpack_string_field(unpacker, wish_name_field, 1).front();
-    DCField *set_name_field = m_manager->m_player_class->get_field_by_name("setName");
-    string name = unpack_string_field(unpacker, set_name_field, 1).front();
+    string wish_name_state = avatar["WishNameState"].get<string>();
+    string wish_name = avatar["WishName"].get<string>();
+    string name = avatar["setName"].get<string>();
 
     string old_wish_name_state = wish_name_state;
     string old_wish_name = wish_name;
@@ -829,40 +1049,13 @@ void AcknowledgeNameOperation::handle_query(uint32_t ctx, uint16_t dclass_id, DC
     }
 
     // We can now update the avatar object in the database with the changes!
-    vector<DCField*> fields {wish_name_state_field, wish_name_field, set_name_field};
-    vector<DCPacker> new_fields;
-    vector<DCPacker> old_fields;
-
-    DCPacker new_wish_name_state_packer;
-    DCPacker new_wish_name_packer;
-    DCPacker new_name_packer;
-    DCPacker old_wish_name_state_packer;
-    DCPacker old_wish_name_packer;
-    DCPacker old_name_packer;
-
-    vector<string> nwns {wish_name_state};
-    vector<string> nwn {wish_name};
-    vector<string> nn {name};
-    vector<string> owns {old_wish_name_state};
-    vector<string> own {old_wish_name};
-    vector<string> on {old_name};
-
-    pack_string_field(new_wish_name_state_packer, wish_name_state_field, nwns, false, false);
-    pack_string_field(new_wish_name_packer, wish_name_field, nwn, false, false);
-    pack_string_field(new_name_packer, set_name_field, nn, false, false);
-    pack_string_field(old_wish_name_state_packer, wish_name_state_field, owns, false, false);
-    pack_string_field(old_wish_name_packer, wish_name_field, own, false, false);
-    pack_string_field(old_name_packer, set_name_field, on, false, false);
-
-    new_fields.push_back(new_wish_name_state_packer);
-    new_fields.push_back(new_wish_name_packer);
-    new_fields.push_back(new_name_packer);
-    old_fields.push_back(old_wish_name_state_packer);
-    old_fields.push_back(old_wish_name_packer);
-    old_fields.push_back(old_name_packer);
-
-    // Update the object.
-    update_object(m_manager->m_database_id, m_av_id, fields, new_fields, old_fields);
+    update_object(m_manager->m_database_id, m_av_id, m_manager->m_player_class, json({
+                  {"WishNameState", {wish_name_state}},
+                  {"WishName", {wish_name}},
+                  {"setName", {name}}}), json({
+                  {"WishNameState", {old_wish_name_state}},
+                  {"WishName", {old_wish_name}},
+                  {"setName", {old_name}}}));
 
     // We're done. We can now shut down this operation.
     off();
@@ -908,57 +1101,30 @@ void RemoveAvatarOperation::post_account_func()
     DCClass *account = g_dcf->get_class_by_name("Account");
     DCField *av_set_field = account->get_field_by_name("ACCOUNT_AV_SET");
     DCField *av_del_field = account->get_field_by_name("ACCOUNT_AV_SET_DEL");
-    vector<uint32_t> avs_removed = unpack_int_field(m_field_unpacker, av_del_field, 0);
+    vector<uint32_t> avs_removed = m_account["ACCOUNT_AV_SET_DEL"].get<vector<uint32_t> >();
     vector<uint32_t> old_avs_removed(avs_removed);
     avs_removed.push_back(m_av_id);
     avs_removed.push_back((uint32_t)ctime(&end_time));
 
     // Get the estate ID of this account.
-    uint32_t estate_id = unpack_int_field(m_field_unpacker, account->get_field_by_name("ESTATE_ID"), 1).front();
-
+    uint32_t estate_id = m_account["ESTATE_ID"].get<uint32_t>();
     if(estate_id != 0) {
+        // Get the estate dclass.
+        DCClass *estate = g_dcf->get_class_by_name("DistributedEstate");
+
         // The following will assume that the house already exists,
         // however it shouldn't be a problem if it doesn't.
-        DCClass *estate = g_dcf->get_class_by_name("DistributedEstate");
-        DCField *slot_toon_id_field = estate->get_field_by_name(string("setSlot") + to_string(index) + "ToonId");
-        DCField *slot_items_field = estate->get_field_by_name(string("setSlot") + to_string(index) + "Items");
-        vector<DCField*> fields {slot_toon_id_field, slot_items_field};
-        vector<DCPacker> new_fields;
-
-        DCPacker toon_id_packer;
-        DCPacker items_packer;
-
-        pack_default_field(toon_id_packer, slot_toon_id_field, false);
-        pack_default_field(items_packer, slot_items_field, false);
-
-        new_fields.push_back(toon_id_packer);
-        new_fields.push_back(items_packer);
-
-        update_object(m_manager->m_database_id, estate_id, fields, new_fields, vector<DCPacker>{});
+        update_object(m_manager->m_database_id, estate_id, estate, json({
+                      {string("setSlot") + to_string(index) + "ToonId", {0}},
+                      {string("setSlot") + to_string(index) + "Items", {{}}}}), json({}));
     }
 
     // We can now update the account with the new data.
-    vector<DCField*> fields {av_set_field, av_del_field};
-    vector<DCPacker> new_fields;
-    vector<DCPacker> old_fields;
-
-    DCPacker new_set_packer;
-    DCPacker new_del_packer;
-    DCPacker old_set_packer;
-    DCPacker old_del_packer;
-
-    pack_int_field(new_set_packer, av_set_field, m_av_set, true, false);
-    pack_int_field(new_del_packer, av_del_field, avs_removed, true, false);
-    pack_int_field(old_set_packer, av_set_field, old_av_set, true, false);
-    pack_int_field(old_del_packer, av_del_field, old_avs_removed, true, false);
-
-    new_fields.push_back(new_set_packer);
-    new_fields.push_back(new_del_packer);
-    old_fields.push_back(old_set_packer);
-    old_fields.push_back(old_del_packer);
-
-    // Update the account.
-    update_object(m_manager->m_database_id, (uint32_t)m_target, fields, new_fields, old_fields);
+    update_object(m_manager->m_database_id, (uint32_t)m_target, account, json({
+                  {"ACCOUNT_AV_SET", {m_av_set}},
+                  {"ACCOUNT_AV_SET_DEL", {avs_removed}}}), json({
+                  {"ACCOUNT_AV_SET", {old_av_set}},
+                  {"ACCOUNT_AV_SET_DEL", {old_avs_removed}}}));
 }
 
 void RemoveAvatarOperation::handle_update(uint32_t ctx, uint8_t success)
@@ -1010,9 +1176,9 @@ void LoadAvatarOperation::post_account_func()
     query_object(m_manager->m_database_id, m_av_id);
 }
 
-void LoadAvatarOperation::handle_query(uint32_t ctx, uint16_t dclass_id, DCPacker &unpacker)
+void LoadAvatarOperation::handle_query(DatagramIterator &dgi, uint32_t ctx, uint16_t dclass_id)
 {
-    AvatarOperation::handle_query(ctx, dclass_id, unpacker);
+    AvatarOperation::handle_query(dgi, ctx, dclass_id);
 
     if(m_manager->m_player_class->get_number() != dclass_id) {
         // This dclass is not a valid avatar! Kill the connection.
@@ -1021,7 +1187,8 @@ void LoadAvatarOperation::handle_query(uint32_t ctx, uint16_t dclass_id, DCPacke
     }
 
     // Store the avatar & move on to setting the avatar.
-    m_av_unpacker = unpacker;
+    uint16_t field_count = dgi.read_uint16();
+    m_avatar = unpack_json_objects(dgi, m_manager->m_player_class, field_count);
     set_avatar();
 }
 
@@ -1151,7 +1318,7 @@ OTPClientManager::OTPClientManager(DCClass* player_class, uint32_t database_id, 
     }
 }
 
-vector<PotentialAvatar> OTPClientManager::get_potential_avatars(map<uint32_t, DCPacker> packed_fields, vector<uint32_t> av_set)
+vector<PotentialAvatar> OTPClientManager::get_potential_avatars(map<uint32_t, json> packed_fields, vector<uint32_t> av_set)
 {
     vector<PotentialAvatar> potential_avatars;
     return potential_avatars;

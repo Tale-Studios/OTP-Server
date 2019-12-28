@@ -3,8 +3,10 @@
 #include "ClientMessages.h"
 #include "core/global.h"
 #include "core/msgtypes.h"
+#include "json/json.hpp"
 
 using namespace std;
+using json = nlohmann::json;
 
 NameGenerator::NameGenerator(string name_file)
 {
@@ -33,6 +35,10 @@ NameGenerator::~NameGenerator()
 
 string NameGenerator::make_name(vector<pair<int16_t, uint8_t> > patterns)
 {
+    if(m_name_map.empty()) {
+        return "";
+    }
+
     vector<string> parts;
     for(auto pattern : patterns) {
         int16_t p = pattern.first;
@@ -47,11 +53,11 @@ string NameGenerator::make_name(vector<pair<int16_t, uint8_t> > patterns)
         }
 
         if(f) {
-            string part_sub = part.substr(0, 1);
-            for (auto & c: part_sub) c = toupper(c);
-            part = part_sub + part.substr(1, 0);
+            part[0] = toupper(part[0]);
         } else {
-            for (auto & c: part) c = tolower(c);
+            for(auto& c : part) {
+                c = tolower(c);
+            }
         }
 
         parts.push_back(part);
@@ -122,18 +128,18 @@ ToontownCreateAvatarOperation::~ToontownCreateAvatarOperation()
 void ToontownCreateAvatarOperation::create_avatar()
 {
     // Get the Toon head color and animal type from the DNA string.
-    uint8_t head_index = 0;
-    uint8_t head_color = 0;
+    uint8_t head_index;
+    uint8_t head_color;
     try {
         DatagramPtr dna_dg = Datagram::create(m_dna_string);
         DatagramIterator dna_dgi = DatagramIterator(dna_dg);
         dna_dgi.get_fixed_string(1);
-        uint8_t head_index = dna_dgi.read_uint8();
+        head_index = dna_dgi.read_uint8();
         dna_dgi.skip(sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint8_t) +
                      sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint8_t) +
                      sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint8_t) +
                      sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint8_t));
-        uint8_t head_color = dna_dgi.read_uint8();
+        head_color = dna_dgi.read_uint8();
     } catch(const DatagramIteratorEOF&) {
         // This DNA string is invalid! Kill the connection.
         kill("Invalid DNA specified!");
@@ -173,543 +179,208 @@ void ToontownCreateAvatarOperation::create_avatar()
     }
 
     // Determine the color.
-    switch(head_color)
-    {
-        case 1:
-            color = "Peach";
-        case 2:
-            color = "Bright Red";
-        case 3:
-            color = "Red";
-        case 4:
-            color = "Maroon";
-        case 5:
-            color = "Sienna";
-        case 6:
-            color = "Brown";
-        case 7:
-            color = "Tan";
-        case 8:
-            color = "Coral";
-        case 9:
-            color = "Orange";
-        case 10:
-            color = "Yellow";
-        case 11:
-            color = "Cream";
-        case 12:
-            color = "Citrine";
-        case 13:
-            color = "Lime";
-        case 14:
-            color = "Sea Green";
-        case 15:
-            color = "Green";
-        case 16:
-            color = "Light Blue";
-        case 17:
-            color = "Aqua";
-        case 18:
-            color = "Blue";
-        case 19:
-            color = "Periwinkle";
-        case 20:
-            color = "Royal Blue";
-        case 21:
-            color = "Slate Blue";
-        case 22:
-            color = "Purple";
-        case 23:
-            color = "Lavender";
-        case 24:
-            color = "Pink";
-        case 25:
-            color = "Plum";
-        case 26:
-            color = "Black";
-        default:
-            color = "White";
+    if(head_color == 0) {
+        color = "White";
+    }
+    else if(head_color == 1) {
+        color = "Peach";
+    }
+    else if(head_color == 2) {
+        color = "Bright Red";
+    }
+    else if(head_color == 3) {
+        color = "Red";
+    }
+    else if(head_color == 4) {
+        color = "Maroon";
+    }
+    else if(head_color == 5) {
+        color = "Sienna";
+    }
+    else if(head_color == 6) {
+        color = "Brown";
+    }
+    else if(head_color == 7) {
+        color = "Tan";
+    }
+    else if(head_color == 8) {
+        color = "Coral";
+    }
+    else if(head_color == 9) {
+        color = "Orange";
+    }
+    else if(head_color == 10) {
+        color = "Yellow";
+    }
+    else if(head_color == 11) {
+        color = "Cream";
+    }
+    else if(head_color == 12) {
+        color = "Citrine";
+    }
+    else if(head_color == 13) {
+        color = "Lime";
+    }
+    else if(head_color == 14) {
+        color = "Sea Green";
+    }
+    else if(head_color == 15) {
+        color = "Green";
+    }
+    else if(head_color == 16) {
+        color = "Light Blue";
+    }
+    else if(head_color == 17) {
+        color = "Aqua";
+    }
+    else if(head_color == 18) {
+        color = "Blue";
+    }
+    else if(head_color == 19) {
+        color = "Periwinkle";
+    }
+    else if(head_color == 20) {
+        color = "Royal Blue";
+    }
+    else if(head_color == 21) {
+        color = "Slate Blue";
+    }
+    else if(head_color == 22) {
+        color = "Purple";
+    }
+    else if(head_color == 23) {
+        color = "Lavender";
+    }
+    else if(head_color == 24) {
+        color = "Pink";
+    }
+    else if(head_color == 25) {
+        color = "Plum";
+    }
+    else if(head_color == 26) {
+        color = "Black";
     }
 
     // Add the color and animal together to create the temporary name.
     string av_name = color + animal;
 
-    // We will now construct a new Toon with the given values.
-    DCPacker av_packer;
-
-    // Get the avatar dclass.
-    DCClass *avatar = m_manager->m_player_class;
-
-    // Pack the default value for setName.
-    DCField *name_field = avatar->get_field_by_name("setName");
-    pack_string(av_packer, name_field, av_name);
-
-    // Pack the default value for WishNameState.
-    DCField *wish_state_field = avatar->get_field_by_name("WishNameState");
-    pack_string(av_packer, wish_state_field, "OPEN");
-
-    // Pack the default value for WishName.
-    DCField *wish_name_field = avatar->get_field_by_name("WishName");
-    pack_string(av_packer, wish_name_field, "");
-
-    // Pack the DNA string.
-    DCField *dna_field = avatar->get_field_by_name("setDNAString");
-    pack_string(av_packer, dna_field, m_dna_string);
-
-    // Pack the account ID.
-    DCField *disl_field = avatar->get_field_by_name("setDISLid");
-    pack_uint(av_packer, disl_field, (uint32_t)m_target);
-
-    // Now, in comes an excessive amount of code.
-    // Iterating over DB fields and packing their default value will
-    // not work, as some fields require custom values.
-    // We need to pack custom default values for each avatar field.
-    pack_string(av_packer, avatar->get_field_by_name("setAccountName"), "");
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setFriendsList")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setFriendsList"));
-    av_packer.push();
-    av_packer.pack_default_value();
-    av_packer.pop();
-    av_packer.end_pack();
-    pack_uint(av_packer, avatar->get_field_by_name("setPreviousAccess"), 0);
-    pack_uint(av_packer, avatar->get_field_by_name("setGM"), 0);
-    pack_int(av_packer, avatar->get_field_by_name("setMaxBankMoney"), 12000);
-    pack_int(av_packer, avatar->get_field_by_name("setBankMoney"), 0);
-    pack_int(av_packer, avatar->get_field_by_name("setMaxMoney"), 40);
-    pack_int(av_packer, avatar->get_field_by_name("setMoney"), 0);
-    pack_int(av_packer, avatar->get_field_by_name("setMaxHp"), 15);
-    pack_int(av_packer, avatar->get_field_by_name("setHp"), 15);
-    pack_string(av_packer, avatar->get_field_by_name("setExperience"), "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00");
-    pack_uint(av_packer, avatar->get_field_by_name("setMaxCarry"), 20);
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setTrackAccess")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setTrackAccess"));
-    av_packer.push();
-    av_packer.push();
-    av_packer.pack_uint(0);
-    av_packer.pack_uint(0);
-    av_packer.pack_uint(0);
-    av_packer.pack_uint(0);
-    av_packer.pack_uint(1);
-    av_packer.pack_uint(1);
-    av_packer.pack_uint(0);
-    av_packer.pop();
-    av_packer.pop();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setTrackProgress")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setTrackProgress"));
-    av_packer.push();
-    av_packer.pack_int(-1);
-    av_packer.pack_uint(0);
-    av_packer.pop();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setTrackBonusLevel")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setTrackBonusLevel"));
-    av_packer.push();
-    av_packer.push();
-    for(uint16_t x{}; x < 7; ++x) {
-        av_packer.pack_int(-1);
-    }
-    av_packer.pop();
-    av_packer.pop();
-    av_packer.end_pack();
-    pack_string(av_packer, avatar->get_field_by_name("setInventory"), "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00");
-    pack_uint(av_packer, avatar->get_field_by_name("setMaxNPCFriends"), 16);
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setNPCFriendsDict")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setNPCFriendsDict"));
-    av_packer.pack_default_value();
-    av_packer.end_pack();
-    pack_uint(av_packer, avatar->get_field_by_name("setDefaultShard"), 0);
-    pack_uint(av_packer, avatar->get_field_by_name("setDefaultZone"), 0);
-    pack_string(av_packer, avatar->get_field_by_name("setShtickerBook"), "");
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setZonesVisited")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setZonesVisited"));
-    av_packer.push();
-    av_packer.push();
-    av_packer.pack_uint(2000);
-    av_packer.pop();
-    av_packer.pop();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setHoodsVisited")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setHoodsVisited"));
-    av_packer.push();
-    av_packer.push();
-    av_packer.pack_uint(2000);
-    av_packer.pop();
-    av_packer.pop();
-    av_packer.end_pack();
-    pack_string(av_packer, avatar->get_field_by_name("setInterface"), "");
-    pack_uint(av_packer, avatar->get_field_by_name("setLastHood"), 0);
-    pack_uint(av_packer, avatar->get_field_by_name("setTutorialAck"), 1);
-    pack_uint(av_packer, avatar->get_field_by_name("setMaxClothes"), 10);
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setClothesTopsList")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setClothesTopsList"));
-    av_packer.pack_default_value();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setClothesBottomsList")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setClothesBottomsList"));
-    av_packer.pack_default_value();
-    av_packer.end_pack();
-    pack_uint(av_packer, avatar->get_field_by_name("setMaxAccessories"), 0);
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setHatList")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setHatList"));
-    av_packer.pack_default_value();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setGlassesList")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setGlassesList"));
-    av_packer.pack_default_value();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setBackpackList")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setBackpackList"));
-    av_packer.pack_default_value();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setShoesList")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setShoesList"));
-    av_packer.pack_default_value();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setHat")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setHat"));
-    av_packer.push();
-    for(uint16_t x{}; x < 3; ++x) {
-        av_packer.pack_uint(0);
-    }
-    av_packer.pop();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setGlasses")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setGlasses"));
-    av_packer.push();
-    for(uint16_t x{}; x < 3; ++x) {
-        av_packer.pack_uint(0);
-    }
-    av_packer.pop();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setBackpack")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setBackpack"));
-    av_packer.push();
-    for(uint16_t x{}; x < 3; ++x) {
-        av_packer.pack_uint(0);
-    }
-    av_packer.pop();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setShoes")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setShoes"));
-    av_packer.push();
-    for(uint16_t x{}; x < 3; ++x) {
-        av_packer.pack_uint(0);
-    }
-    av_packer.pop();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setGardenSpecials")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setGardenSpecials"));
-    av_packer.pack_default_value();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setEmoteAccess")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setEmoteAccess"));
-    av_packer.push();
-    av_packer.push();
-    for(uint16_t x{}; x < 5; ++x) {
-        av_packer.pack_uint(1);
-    }
-    for(uint16_t x{}; x < 15; ++x) {
-        av_packer.pack_uint(0);
-    }
-    av_packer.pop();
-    av_packer.pop();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setCustomMessages")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setCustomMessages"));
-    av_packer.pack_default_value();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setResistanceMessages")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setResistanceMessages"));
-    av_packer.pack_default_value();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setPetTrickPhrases")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setPetTrickPhrases"));
-    av_packer.push();
-    av_packer.push();
-    av_packer.pack_uint(0);
-    av_packer.pop();
-    av_packer.pop();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setCatalogSchedule")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setCatalogSchedule"));
-    av_packer.push();
-    for(uint16_t x{}; x < 2; ++x) {
-        av_packer.pack_uint(0);
-    }
-    av_packer.pop();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setCatalog")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setCatalog"));
-    av_packer.pack_default_value();
-    av_packer.end_pack();
-    pack_string(av_packer, avatar->get_field_by_name("setMailboxContents"), "");
-    pack_string(av_packer, avatar->get_field_by_name("setDeliverySchedule"), "");
-    pack_string(av_packer, avatar->get_field_by_name("setGiftSchedule"), "");
-    pack_string(av_packer, avatar->get_field_by_name("setAwardMailboxContents"), "");
-    pack_string(av_packer, avatar->get_field_by_name("setAwardSchedule"), "");
-    pack_uint(av_packer, avatar->get_field_by_name("setAwardNotify"), 0);
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setCatalogNotify")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setCatalogNotify"));
-    av_packer.push();
-    av_packer.pack_uint(0);
-    av_packer.pack_uint(0);
-    av_packer.pop();
-    av_packer.end_pack();
-    pack_uint(av_packer, avatar->get_field_by_name("setSpeedChatStyleIndex"), 1);
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setTeleportAccess")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setTeleportAccess"));
-    av_packer.pack_default_value();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setCogStatus")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setCogStatus"));
-    av_packer.push();
-    av_packer.push();
-    for(uint16_t x{}; x < 32; ++x) {
-        av_packer.pack_uint(1);
-    }
-    av_packer.pop();
-    av_packer.pop();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setCogCount")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setCogCount"));
-    av_packer.push();
-    av_packer.push();
-    for(uint16_t x{}; x < 32; ++x) {
-        av_packer.pack_uint(0);
-    }
-    av_packer.pop();
-    av_packer.pop();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setCogRadar")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setCogRadar"));
-    av_packer.push();
-    av_packer.push();
-    for(uint16_t x{}; x < 4; ++x) {
-        av_packer.pack_uint(0);
-    }
-    av_packer.pop();
-    av_packer.pop();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setBuildingRadar")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setBuildingRadar"));
-    av_packer.push();
-    av_packer.push();
-    for(uint16_t x{}; x < 4; ++x) {
-        av_packer.pack_uint(0);
-    }
-    av_packer.pop();
-    av_packer.pop();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setCogLevels")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setCogLevels"));
-    av_packer.push();
-    av_packer.push();
-    for(uint16_t x{}; x < 4; ++x) {
-        av_packer.pack_uint(0);
-    }
-    av_packer.pop();
-    av_packer.pop();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setCogTypes")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setCogTypes"));
-    av_packer.push();
-    av_packer.push();
-    for(uint16_t x{}; x < 4; ++x) {
-        av_packer.pack_uint(0);
-    }
-    av_packer.pop();
-    av_packer.pop();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setCogParts")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setCogParts"));
-    av_packer.push();
-    av_packer.push();
-    for(uint16_t x{}; x < 4; ++x) {
-        av_packer.pack_uint(0);
-    }
-    av_packer.pop();
-    av_packer.pop();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setCogMerits")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setCogMerits"));
-    av_packer.push();
-    av_packer.push();
-    for(uint16_t x{}; x < 4; ++x) {
-        av_packer.pack_uint(0);
-    }
-    av_packer.pop();
-    av_packer.pop();
-    av_packer.end_pack();
-    pack_uint(av_packer, avatar->get_field_by_name("setHouseId"), 0);
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setQuests")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setQuests"));
-    av_packer.pack_default_value();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setQuestHistory")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setQuestHistory"));
-    av_packer.pack_default_value();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setRewardHistory")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setRewardHistory"));
-    av_packer.push();
-    av_packer.pack_uint(0);
-    av_packer.push();
-    av_packer.pop();
-    av_packer.pop();
-    av_packer.end_pack();
-    pack_uint(av_packer, avatar->get_field_by_name("setQuestCarryLimit"), 1);
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setCheesyEffect")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setCheesyEffect"));
-    av_packer.push();
-    av_packer.pack_int(0);
-    for(uint16_t x{}; x < 2; ++x) {
-        av_packer.pack_uint(0);
-    }
-    av_packer.pop();
-    av_packer.end_pack();
-    pack_uint(av_packer, avatar->get_field_by_name("setPosIndex"), 0);
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setFishCollection")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setFishCollection"));
-    av_packer.pack_default_value();
-    av_packer.end_pack();
-    pack_uint(av_packer, avatar->get_field_by_name("setMaxFishTank"), 20);
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setFishTank")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setFishTank"));
-    av_packer.pack_default_value();
-    av_packer.end_pack();
-    pack_uint(av_packer, avatar->get_field_by_name("setFishingRod"), 0);
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setFishingTrophies")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setFishingTrophies"));
-    av_packer.pack_default_value();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setFlowerCollection")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setFlowerCollection"));
-    av_packer.pack_default_value();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setFlowerBasket")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setFlowerBasket"));
-    av_packer.pack_default_value();
-    av_packer.end_pack();
-    pack_uint(av_packer, avatar->get_field_by_name("setMaxFlowerBasket"), 20);
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setGardenTrophies")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setGardenTrophies"));
-    av_packer.pack_default_value();
-    av_packer.end_pack();
-    pack_uint(av_packer, avatar->get_field_by_name("setShovel"), 0);
-    pack_uint(av_packer, avatar->get_field_by_name("setShovelSkill"), 0);
-    pack_uint(av_packer, avatar->get_field_by_name("setWateringCan"), 0);
-    pack_uint(av_packer, avatar->get_field_by_name("setWateringCanSkill"), 0);
-    pack_uint(av_packer, avatar->get_field_by_name("setPetId"), 0);
-    pack_uint(av_packer, avatar->get_field_by_name("setPetTutorialDone"), 0);
-    pack_uint(av_packer, avatar->get_field_by_name("setFishBingoTutorialDone"), 0);
-    pack_uint(av_packer, avatar->get_field_by_name("setFishBingoMarkTutorialDone"), 0);
-    pack_int(av_packer, avatar->get_field_by_name("setKartBodyType"), -1);
-    pack_int(av_packer, avatar->get_field_by_name("setKartBodyColor"), -1);
-    pack_int(av_packer, avatar->get_field_by_name("setKartAccessoryColor"), -1);
-    pack_int(av_packer, avatar->get_field_by_name("setKartEngineBlockType"), -1);
-    pack_int(av_packer, avatar->get_field_by_name("setKartSpoilerType"), -1);
-    pack_int(av_packer, avatar->get_field_by_name("setKartFrontWheelWellType"), -1);
-    pack_int(av_packer, avatar->get_field_by_name("setKartBackWheelWellType"), -1);
-    pack_int(av_packer, avatar->get_field_by_name("setKartRimType"), -1);
-    pack_int(av_packer, avatar->get_field_by_name("setKartDecalType"), -1);
-    pack_uint(av_packer, avatar->get_field_by_name("setTickets"), 200);
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setKartingHistory")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setKartingHistory"));
-    av_packer.push();
-    av_packer.push();
-    for(uint16_t x{}; x < 16; ++x) {
-        av_packer.pack_uint(0);
-    }
-    av_packer.pop();
-    av_packer.pop();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setKartingTrophies")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setKartingTrophies"));
-    av_packer.push();
-    av_packer.push();
-    for(uint16_t x{}; x < 33; ++x) {
-        av_packer.pack_uint(0);
-    }
-    av_packer.pop();
-    av_packer.pop();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setKartingPersonalBest")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setKartingPersonalBest"));
-    av_packer.push();
-    av_packer.push();
-    for(uint16_t x{}; x < 6; ++x) {
-        av_packer.pack_uint(0);
-    }
-    av_packer.pop();
-    av_packer.pop();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setKartingPersonalBest2")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setKartingPersonalBest2"));
-    av_packer.push();
-    av_packer.push();
-    for(uint16_t x{}; x < 12; ++x) {
-        av_packer.pack_uint(0);
-    }
-    av_packer.pop();
-    av_packer.pop();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setKartAccessoriesOwned")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setKartAccessoriesOwned"));
-    av_packer.push();
-    av_packer.push();
-    for(uint16_t x{}; x < 16; ++x) {
-        av_packer.pack_int(-1);
-    }
-    av_packer.pop();
-    av_packer.pop();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setCogSummonsEarned")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setCogSummonsEarned"));
-    av_packer.push();
-    av_packer.push();
-    for(uint16_t x{}; x < 32; ++x) {
-        av_packer.pack_uint(0);
-    }
-    av_packer.pop();
-    av_packer.pop();
-    av_packer.end_pack();
-    pack_uint(av_packer, avatar->get_field_by_name("setGardenStarted"), 0);
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setGolfHistory")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setGolfHistory"));
-    av_packer.push();
-    av_packer.push();
-    for(uint16_t x{}; x < 18; ++x) {
-        av_packer.pack_uint(0);
-    }
-    av_packer.pop();
-    av_packer.pop();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setPackedGolfHoleBest")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setPackedGolfHoleBest"));
-    av_packer.push();
-    av_packer.push();
-    for(uint16_t x{}; x < 18; ++x) {
-        av_packer.pack_uint(0);
-    }
-    av_packer.pop();
-    av_packer.pop();
-    av_packer.end_pack();
-    av_packer.raw_pack_uint16(avatar->get_field_by_name("setGolfCourseBest")->get_number());
-    av_packer.begin_pack(avatar->get_field_by_name("setGolfCourseBest"));
-    av_packer.push();
-    av_packer.push();
-    for(uint16_t x{}; x < 3; ++x) {
-        av_packer.pack_uint(0);
-    }
-    av_packer.pop();
-    av_packer.pop();
-    av_packer.end_pack();
-    pack_uint(av_packer, avatar->get_field_by_name("setPinkSlips"), 0);
-    pack_uint(av_packer, avatar->get_field_by_name("setNametagStyle"), 0);
+    // Put together a massive JSON object with all of the default toon fields.
+    json toon_fields = {{"setName", {av_name}},
+                        {"WishNameState", {"OPEN"}},
+                        {"WishName", {""}},
+                        {"setDNAString", {m_dna_string}},
+                        {"setDISLid", {(uint32_t)m_target}},
+                        {"setAccountName", {""}},
+                        {"setFriendsList", {{}}},
+                        {"setPreviousAccess", {0}},
+                        {"setGM", {0}},
+                        {"setMaxBankMoney", {12000}},
+                        {"setBankMoney", {0}},
+                        {"setMaxMoney", {40}},
+                        {"setMoney", {0}},
+                        {"setMaxHp", {15}},
+                        {"setHp", {15}},
+                        {"setExperience", {"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"}},
+                        {"setMaxCarry", {20}},
+                        {"setTrackAccess", {{0, 0, 0, 0, 1, 1, 0}}},
+                        {"setTrackProgress", {-1, 0}},
+                        {"setTrackBonusLevel", {{-1, -1, -1, -1, -1, -1, -1}}},
+                        {"setInventory", {"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"}},
+                        {"setMaxNPCFriends", {16}},
+                        {"setNPCFriendsDict", {{}}},
+                        {"setDefaultShard", {0}},
+                        {"setDefaultZone", {0}},
+                        {"setShtickerBook", {""}},
+                        {"setZonesVisited", {{2000}}},
+                        {"setHoodsVisited", {{2000}}},
+                        {"setInterface", {""}},
+                        {"setLastHood", {0}},
+                        {"setTutorialAck", {1}},
+                        {"setMaxClothes", {10}},
+                        {"setClothesTopsList", {{}}},
+                        {"setClothesBottomsList", {{}}},
+                        {"setMaxAccessories", {0}},
+                        {"setHatList", {{}}},
+                        {"setGlassesList", {{}}},
+                        {"setBackpackList", {{}}},
+                        {"setShoesList", {{}}},
+                        {"setHat", {0, 0, 0}},
+                        {"setGlasses", {0, 0, 0}},
+                        {"setBackpack", {0, 0, 0}},
+                        {"setShoes", {0, 0, 0}},
+                        {"setGardenSpecials", {{}}},
+                        {"setEmoteAccess", {{1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}},
+                        {"setCustomMessages", {{}}},
+                        {"setResistanceMessages", {{}}},
+                        {"setPetTrickPhrases", {{0}}},
+                        {"setCatalogSchedule", {0, 0}},
+                        {"setCatalog", {"", "", ""}},
+                        {"setMailboxContents", {""}},
+                        {"setDeliverySchedule", {""}},
+                        {"setGiftSchedule", {""}},
+                        {"setAwardMailboxContents", {""}},
+                        {"setAwardSchedule", {""}},
+                        {"setAwardNotify", {0}},
+                        {"setCatalogNotify", {0, 0}},
+                        {"setSpeedChatStyleIndex", {1}},
+                        {"setTeleportAccess", {{}}},
+                        {"setCogStatus", {{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}}},
+                        {"setCogCount", {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}},
+                        {"setCogRadar", {{0, 0, 0, 0}}},
+                        {"setBuildingRadar", {{0, 0, 0, 0}}},
+                        {"setCogLevels", {{0, 0, 0, 0}}},
+                        {"setCogTypes", {{0, 0, 0, 0}}},
+                        {"setCogParts", {{0, 0, 0, 0}}},
+                        {"setCogMerits", {{0, 0, 0, 0}}},
+                        {"setHouseId", {0}},
+                        {"setQuests", {{}}},
+                        {"setQuestHistory", {{}}},
+                        {"setRewardHistory", {0, {}}},
+                        {"setQuestCarryLimit", {1}},
+                        {"setCheesyEffect", {0, 0, 0}},
+                        {"setPosIndex", {0}},
+                        {"setFishCollection", {{}, {}, {}}},
+                        {"setMaxFishTank", {20}},
+                        {"setFishTank", {{}, {}, {}}},
+                        {"setFishingRod", {0}},
+                        {"setFishingTrophies", {{}}},
+                        {"setFlowerCollection", {{}, {}}},
+                        {"setFlowerBasket", {{}, {}}},
+                        {"setMaxFlowerBasket", {20}},
+                        {"setGardenTrophies", {{}}},
+                        {"setShovel", {0}},
+                        {"setShovelSkill", {0}},
+                        {"setWateringCan", {0}},
+                        {"setWateringCanSkill", {0}},
+                        {"setPetId", {0}},
+                        {"setPetTutorialDone", {0}},
+                        {"setFishBingoTutorialDone", {0}},
+                        {"setFishBingoMarkTutorialDone", {0}},
+                        {"setKartBodyType", {-1}},
+                        {"setKartBodyColor", {-1}},
+                        {"setKartAccessoryColor", {-1}},
+                        {"setKartEngineBlockType", {-1}},
+                        {"setKartSpoilerType", {-1}},
+                        {"setKartFrontWheelWellType", {-1}},
+                        {"setKartBackWheelWellType", {-1}},
+                        {"setKartRimType", {-1}},
+                        {"setKartDecalType", {-1}},
+                        {"setTickets", {200}},
+                        {"setKartingHistory", {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}},
+                        {"setKartingTrophies", {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}},
+                        {"setKartingPersonalBest", {{0, 0, 0, 0, 0, 0}}},
+                        {"setKartingPersonalBest2", {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}},
+                        {"setKartAccessoriesOwned", {{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}}},
+                        {"setCogSummonsEarned", {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}},
+                        {"setGardenStarted", {0}},
+                        {"setGolfHistory", {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}},
+                        {"setPackedGolfHoleBest", {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}},
+                        {"setGolfCourseBest", {{0, 0, 0}}},
+                        {"setPinkSlips", {0}},
+                        {"setNametagStyle", {0}}};
 
     // Create this new Toon object in the database.
-    create_object(m_manager->m_database_id, avatar, av_packer, 112);
+    create_object(m_manager->m_database_id, m_manager->m_player_class, toon_fields);
 }
 
 SetNameTypedOperation::SetNameTypedOperation(ToontownClientManager *manager, DisneyClient& client, channel_t target) :
@@ -751,9 +422,9 @@ void SetNameTypedOperation::post_account_func()
     query_object(m_manager->m_database_id, m_av_id);
 }
 
-void SetNameTypedOperation::handle_query(uint32_t ctx, uint16_t dclass_id, DCPacker &unpacker)
+void SetNameTypedOperation::handle_query(DatagramIterator &dgi, uint32_t ctx, uint16_t dclass_id)
 {
-    AvatarOperation::handle_query(ctx, dclass_id, unpacker);
+    AvatarOperation::handle_query(dgi, ctx, dclass_id);
 
     if(m_manager->m_player_class->get_number() != dclass_id) {
         // This dclass is not a valid avatar! Kill the connection.
@@ -761,8 +432,12 @@ void SetNameTypedOperation::handle_query(uint32_t ctx, uint16_t dclass_id, DCPac
         return;
     }
 
-    DCField* wish_name_state_field = m_manager->m_player_class->get_field_by_name("WishNameState");
-    string wish_name_state = unpack_string_field(unpacker, wish_name_state_field, 1).front();
+    // Extract the avatar fields.
+    uint16_t field_count = dgi.read_uint16();
+    json avatar = unpack_json_objects(dgi, m_manager->m_player_class, field_count);
+
+    // Get the wish name state.
+    string wish_name_state = avatar["WishNameState"].get<vector<string> >()[0];
     if(wish_name_state != "OPEN") {
         // This avatar's wish name state is not set
         // to a nameable state. Kill the connection.
@@ -782,25 +457,8 @@ void SetNameTypedOperation::judge_name()
     if(m_av_id > 0 && status) {
         // Cool, this is a valid name, and we have an av_id.
         // Let's update their avatar with the new wish name & status.
-        DCField* wish_name_state_field = m_manager->m_player_class->get_field_by_name("WishNameState");
-        DCField* wish_name_field = m_manager->m_player_class->get_field_by_name("WishName");
-        vector<DCField*> fields {wish_name_state_field, wish_name_field};
-        vector<DCPacker> new_fields;
-
-        DCPacker wish_name_state_packer;
-        DCPacker wish_name_packer;
-
-        vector<string> wns {"OPEN"};
-        vector<string> wn {m_av_name};
-
-        pack_string_field(wish_name_state_packer, wish_name_state_field, wns, false, false);
-        pack_string_field(wish_name_packer, wish_name_field, wn, false, false);
-
-        new_fields.push_back(wish_name_state_packer);
-        new_fields.push_back(wish_name_packer);
-
-        // Update the object.
-        update_object(m_manager->m_database_id, m_av_id, fields, new_fields, vector<DCPacker>{});
+        update_object(m_manager->m_database_id, m_av_id, m_manager->m_player_class, json({
+                      {"WishNameState", {"OPEN"}}, {"WishName", {m_av_name}}}), json({}));
     }
 
     if(m_av_id != 0) {
@@ -865,9 +523,9 @@ void SetNamePatternOperation::post_account_func()
     query_object(m_manager->m_database_id, m_av_id);
 }
 
-void SetNamePatternOperation::handle_query(uint32_t ctx, uint16_t dclass_id, DCPacker &unpacker)
+void SetNamePatternOperation::handle_query(DatagramIterator &dgi, uint32_t ctx, uint16_t dclass_id)
 {
-    AvatarOperation::handle_query(ctx, dclass_id, unpacker);
+    AvatarOperation::handle_query(dgi, ctx, dclass_id);
 
     if(m_manager->m_player_class->get_number() != dclass_id) {
         // This dclass is not a valid avatar! Kill the connection.
@@ -875,8 +533,12 @@ void SetNamePatternOperation::handle_query(uint32_t ctx, uint16_t dclass_id, DCP
         return;
     }
 
-    DCField* wish_name_state_field = m_manager->m_player_class->get_field_by_name("WishNameState");
-    string wish_name_state = unpack_string_field(unpacker, wish_name_state_field, 1).front();
+    // Extract the avatar fields.
+    uint16_t field_count = dgi.read_uint16();
+    json avatar = unpack_json_objects(dgi, m_manager->m_player_class, field_count);
+
+    // Get the wish name state.
+    string wish_name_state = avatar["WishNameState"].get<vector<string> >()[0];
     if(wish_name_state != "OPEN") {
         // This avatar's wish name state is not set
         // to a nameable state. Kill the connection.
@@ -896,32 +558,16 @@ void SetNamePatternOperation::set_name()
     patterns.push_back(make_pair(m_p3, m_f3));
     patterns.push_back(make_pair(m_p4, m_f4));
     string name = m_manager->create_name(patterns);
+    if(!name.size()) {
+        kill("Failed to compute avatar pattern name!");
+        return;
+    }
 
     // We can now update the avatar object with the name.
-    DCField* wish_name_state_field = m_manager->m_player_class->get_field_by_name("WishNameState");
-    DCField* wish_name_field = m_manager->m_player_class->get_field_by_name("WishName");
-    DCField* set_name_field = m_manager->m_player_class->get_field_by_name("setName");
-    vector<DCField*> fields {wish_name_state_field, wish_name_field, set_name_field};
-    vector<DCPacker> new_fields;
-
-    DCPacker wish_name_state_packer;
-    DCPacker wish_name_packer;
-    DCPacker name_packer;
-
-    vector<string> wns {"LOCKED"};
-    vector<string> wn {""};
-    vector<string> n {name};
-
-    pack_string_field(wish_name_state_packer, wish_name_state_field, wns, false, false);
-    pack_string_field(wish_name_packer, wish_name_field, wn, false, false);
-    pack_string_field(name_packer, set_name_field, n, false, false);
-
-    new_fields.push_back(wish_name_state_packer);
-    new_fields.push_back(wish_name_packer);
-    new_fields.push_back(name_packer);
-
-    // Update the object.
-    update_object(m_manager->m_database_id, m_av_id, fields, new_fields, vector<DCPacker>{});
+    update_object(m_manager->m_database_id, m_av_id, m_manager->m_player_class, json({
+                  {"WishNameState", {"LOCKED"}},
+                  {"WishName", {""}},
+                  {"setName", {name}}}), json({}));
 
     // We're done. We can now send the response update and shut down.
     LoggedEvent event("avatar-named");
@@ -944,7 +590,7 @@ ToontownClientManager::ToontownClientManager(DCClass* player_class, uint32_t dat
     m_name_generator = new NameGenerator(name_file);
 }
 
-vector<PotentialAvatar> ToontownClientManager::get_potential_avatars(map<uint32_t, DCPacker> packed_fields, vector<uint32_t> av_set)
+vector<PotentialAvatar> ToontownClientManager::get_potential_avatars(map<uint32_t, json> packed_fields, vector<uint32_t> av_set)
 {
     // Here is where we'll construct a list of potential avatars,
     // given the data from the packed fields, and send that to the client.
@@ -953,37 +599,20 @@ vector<PotentialAvatar> ToontownClientManager::get_potential_avatars(map<uint32_
     // Loop through the avatar set vector:
     for(size_t i = 0; i < av_set.size(); ++i) {
         uint32_t av_id = av_set[i];
+        if(av_id <= 0) {
+            continue;
+        }
 
-        DCPacker unpacker = packed_fields[av_id];
-        DCClass *toon = g_dcf->get_class_by_name("DistributedToon");
-        DCField *wish_name_state_field = toon->get_field_by_name("WishNameState");
-        DCField *set_name_field = toon->get_field_by_name("setName");
-        DCField *wish_name_field = toon->get_field_by_name("WishName");
-        DCField *dna_string_field = toon->get_field_by_name("setDNAString");
+        // Get the fields for this avatar.
+        json fields = packed_fields[av_id];
 
         // Get the appropriate values.
         string wish_name = "";
         uint8_t name_state = 0;
-
-        unpacker.begin_unpack(wish_name_state_field);
-        unpacker.seek("WishNameState");
-        string wish_name_state = unpacker.unpack_string();
-        unpacker.end_unpack();
-
-        unpacker.begin_unpack(set_name_field);
-        unpacker.seek("setName");
-        string name = unpacker.unpack_string();
-        unpacker.end_unpack();
-
-        unpacker.begin_unpack(wish_name_field);
-        unpacker.seek("WishName");
-        string field_wish_name = unpacker.unpack_string();
-        unpacker.end_unpack();
-
-        unpacker.begin_unpack(dna_string_field);
-        unpacker.seek("setDNAString");
-        string dna_string = unpacker.unpack_string();
-        unpacker.end_unpack();
+        string wish_name_state = fields["WishNameState"].get<vector<string> >()[0];
+        string name = fields["setName"].get<vector<string> >()[0];
+        string field_wish_name = fields["WishName"].get<vector<string> >()[0];
+        string dna_string = fields["setDNAString"].get<vector<string> >()[0];
 
         if(wish_name_state == "OPEN") {
             name_state = 1;

@@ -29,7 +29,7 @@ class Operator
     virtual ~Operator();
 
     virtual void handle_create(uint32_t ctx, uint32_t do_id);
-    virtual void handle_query(uint32_t ctx, uint16_t dclass_id, DCPacker &unpacker);
+    virtual void handle_query(DatagramIterator &dgi, uint32_t ctx, uint16_t dclass_id);
     virtual void handle_update(uint32_t ctx, uint8_t success);
     virtual void handle_lookup(bool success, uint32_t account_id, std::string play_token);
 
@@ -45,149 +45,30 @@ class Operator
         return do_id + ((int64_t)1003L << 32);
     }
 
-    INLINE void pack_default_field(DCPacker &packer, DCField *field, bool num)
-    {
-        if(num) {
-            packer.raw_pack_uint16(field->get_number());
-        }
+    // Packs a particular JSON object into a DCPacker.
+    void pack_json_object(DCPacker &packer, std::string field_name, nlohmann::json &object);
 
-        packer.begin_pack(field);
-        packer.pack_default_value();
-        packer.end_pack();
-    }
+    // Packs all given fields in a JSON object into a DCPacker.
+    void pack_json_objects(DCPacker &packer, DCClass *dclass, nlohmann::json &object);
 
-    INLINE void pack_default_field(DCPacker &packer, DCField *field)
-    {
-        pack_default_field(packer, field, true);
-    }
+    // Unpacks a particular element in a DCPacker into a JSON object.
+    void unpack_json_object(DCPacker &unpacker, std::string field_name, nlohmann::json &object);
 
-    INLINE void pack_int_field(DCPacker &packer, DCField *field, std::vector<uint32_t> v, bool list, bool num)
-    {
-        if(num) {
-            packer.raw_pack_uint16(field->get_number());
-        }
-
-        packer.begin_pack(field);
-        if(list) {
-            packer.push();
-        }
-
-        for(auto i : v)
-        {
-            packer.pack_uint(i);
-        }
-
-        if(list) {
-            packer.pop();
-        }
-
-        packer.end_pack();
-    }
-
-    INLINE void pack_int_field(DCPacker &packer, DCField *field, std::vector<uint32_t> v, bool list)
-    {
-        pack_int_field(packer, field, v, list, true);
-    }
-
-    INLINE void pack_string_field(DCPacker &packer, DCField *field, std::vector<std::string> v, bool list, bool num)
-    {
-        if(num) {
-            packer.raw_pack_uint16(field->get_number());
-        }
-
-        packer.begin_pack(field);
-        if(list) {
-            packer.push();
-        }
-
-        for(auto s : v)
-        {
-            packer.pack_string(s);
-        }
-
-        if(list) {
-            packer.pop();
-        }
-
-        packer.end_pack();
-    }
-
-    INLINE void pack_string_field(DCPacker &packer, DCField *field, std::vector<std::string> v, bool list)
-    {
-        pack_string_field(packer, field, v, list, true);
-    }
-
-    INLINE std::vector<uint32_t> unpack_int_field(DCPacker &unpacker, DCField *field, uint8_t expected_num)
-    {
-        unpacker.begin_unpack(field);
-        unpacker.seek(field->get_name());
-
-        std::vector<uint32_t> v;
-        if(expected_num > 0) {
-            for(size_t i=0; i<expected_num; ++i) {
-                v.push_back(0);
-            }
-
-            for(size_t i=0; i<expected_num; ++i) {
-                if(i < unpacker.get_unpack_length()) {
-                    continue;
-                }
-
-                v[i] = unpacker.unpack_uint();
-            }
-        } else {
-            for(size_t i=0; i<unpacker.get_unpack_length(); ++i) {
-                v[i] = unpacker.unpack_uint();
-            }
-        }
-
-        unpacker.end_unpack();
-
-        return v;
-    }
-
-    INLINE std::vector<std::string> unpack_string_field(DCPacker &unpacker, DCField *field, uint8_t expected_num)
-    {
-        unpacker.begin_unpack(field);
-        unpacker.seek(field->get_name());
-
-        std::vector<std::string> v;
-        if(expected_num > 0) {
-            for(size_t i=0; i<expected_num; ++i) {
-                v.push_back("");
-            }
-
-            for(size_t i=0; i<expected_num; ++i) {
-                if(i < unpacker.get_unpack_length()) {
-                    continue;
-                }
-
-                v[i] = unpacker.unpack_string();
-            }
-        } else {
-            for(size_t i=0; i<unpacker.get_unpack_length(); ++i) {
-                v[i] = unpacker.unpack_string();
-            }
-        }
-
-        unpacker.end_unpack();
-
-        return v;
-    }
+    // Unpacks all packed fields in a DCPacker into a JSON object.
+    nlohmann::json unpack_json_objects(DatagramIterator &dgi, DCClass *dclass, size_t field_count);
 
     // Creates an object in the specified database.
     // database_id specifies the control channel of the target database.
     // dclass specifies the class of the object to be created.
-    // packer is the DCPacker objects with the pre-packed fields.
-    // field_count is the number of packed fields.
-    void create_object(uint32_t database_id, DCClass *dclass, DCPacker &packer, uint16_t field_count);
+    // fields is a JSON object containing all field names by their values.
+    void create_object(uint32_t database_id, DCClass *dclass, nlohmann::json &fields);
 
     // Query object `do_id` out of the database to retrieve the dclass & fields.
     void query_object(uint32_t database_id, uint32_t do_id);
 
     // Update field(s) on an object, optionally with the requirement that the
     // fields must match some old value.
-    void update_object(uint32_t database_id, uint32_t do_id, std::vector<DCField*> fields, std::vector<DCPacker> new_fields, std::vector<DCPacker> old_fields);
+    void update_object(uint32_t database_id, uint32_t do_id, DCClass *dclass, nlohmann::json &new_fields, nlohmann::json &old_fields);
 
     void warning(std::string text);
 
@@ -285,7 +166,7 @@ class LoginOperation : virtual public GameOperation
 
     // Checks if the queried object is valid and if it is, sets the account.
     // Otherwise, the connection is killed.
-    void handle_query(uint32_t ctx, uint16_t dclass_id, DCPacker &unpacker);
+    void handle_query(DatagramIterator &dgi, uint32_t ctx, uint16_t dclass_id);
 
     // Associates the account with the client and establishes the client.
     void set_account();
@@ -315,15 +196,15 @@ class AvatarOperation : virtual public GameOperation
     void retrieve_account();
 
     // Meant to be inherited. Receives the dclass & fields from a query.
-    virtual void handle_query(uint32_t ctx, uint16_t dclass_id, DCPacker &unpacker);
+    virtual void handle_query(DatagramIterator &dgi, uint32_t ctx, uint16_t dclass_id);
 
     // Meant to be inherited. Handles any operations that must occur post-query.
     virtual void post_account_func();
 
   protected:
     bool m_past_acc_query;
+    nlohmann::json m_account;
     std::vector<uint32_t> m_av_set;
-    DCPacker m_field_unpacker;
 
     void handle_retrieve(DCClass *dclass);
 };
@@ -342,14 +223,14 @@ class GetAvatarsOperation : virtual public AvatarOperation
     virtual void post_account_func();
 
     // Collects important potential avatar fields from an avatar object.
-    void handle_query(uint32_t ctx, uint16_t dclass_id, DCPacker &unpacker);
+    void handle_query(DatagramIterator &dgi, uint32_t ctx, uint16_t dclass_id);
 
     // Here is where we'll fetch a list of potential avatars and send them to the client.
     void send_avatars();
 
   protected:
     std::vector<uint32_t> m_pending_avatars;
-    std::map<uint32_t, DCPacker> m_packed_fields;
+    std::map<uint32_t, nlohmann::json> m_avatar_fields;
     uint8_t m_av_amount;
 };
 
@@ -367,7 +248,7 @@ class CreateAvatarOperation : virtual public GameOperation
     void retrieve_account();
 
     // Prepares the account for creation.
-    void handle_query(uint32_t ctx, uint16_t dclass_id, DCPacker &unpacker);
+    void handle_query(DatagramIterator &dgi, uint32_t ctx, uint16_t dclass_id);
 
     // Creates the avatar in the database (must be inherited).
     virtual void create_avatar();
@@ -386,7 +267,7 @@ class CreateAvatarOperation : virtual public GameOperation
     uint32_t m_av_id;
     std::string m_dna_string;
     std::vector<uint32_t> m_av_set;
-    DCPacker m_field_unpacker;
+    nlohmann::json m_account;
 };
 
 // AcknowledgeNameOperation updates the wish name, name state, and name of an avatar.
@@ -403,7 +284,7 @@ class AcknowledgeNameOperation : virtual public AvatarOperation
     void post_account_func();
 
     // Updates the avatar's name fields and sends a name response to the client.
-    void handle_query(uint32_t ctx, uint16_t dclass_id, DCPacker &unpacker);
+    void handle_query(DatagramIterator &dgi, uint32_t ctx, uint16_t dclass_id);
 
   protected:
     uint32_t m_av_id;
@@ -444,14 +325,14 @@ class LoadAvatarOperation : virtual public AvatarOperation
     void post_account_func();
 
     // Stores the avatar unpacker.
-    void handle_query(uint32_t ctx, uint16_t dclass_id, DCPacker &unpacker);
+    void handle_query(DatagramIterator &dgi, uint32_t ctx, uint16_t dclass_id);
 
     // Activates the avatar on the DBSS & associates it with the client.
     void set_avatar();
 
   protected:
     uint32_t m_av_id;
-    DCPacker m_av_unpacker;
+    nlohmann::json m_avatar;
 };
 
 // UnloadAvatarOperation cleanly unloads the avatar by removing the object
@@ -501,7 +382,7 @@ class OTPClientManager
                      std::string database_type, std::string database_file);
 
     // Gathers together PotentialAvatar structs through packed fields & an avatar set. Must be inherited.
-    virtual std::vector<PotentialAvatar> get_potential_avatars(std::map<uint32_t, DCPacker> packed_fields, std::vector<uint32_t> av_set);
+    virtual std::vector<PotentialAvatar> get_potential_avatars(std::map<uint32_t, nlohmann::json> packed_fields, std::vector<uint32_t> av_set);
 
     // Judges whether a name is valid or not.
     virtual bool judge_name(std::string name);

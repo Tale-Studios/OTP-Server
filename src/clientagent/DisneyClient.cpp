@@ -483,21 +483,17 @@ class DisneyClient : public Client, public NetworkHandler
         uint32_t ctx = dgi.read_uint32();
         uint8_t success = dgi.read_uint8();
 
-        DCPacker unpacker;
-
         // Call back the operator if we didn't succeed.
         if(!success) {
             if(g_cm->m_context_operator.find(ctx) != g_cm->m_context_operator.end()) {
-                g_cm->m_context_operator[ctx]->handle_query(ctx, 0, unpacker);
+                g_cm->m_context_operator[ctx]->handle_query(dgi, ctx, 0);
             }
         }
 
         uint16_t dclass_id = dgi.read_uint16();
 
-        unpacker.set_unpack_data(dgi.get_remaining_bytes());
-
         if(g_cm->m_context_operator.find(ctx) != g_cm->m_context_operator.end()) {
-            g_cm->m_context_operator[ctx]->handle_query(ctx, dclass_id, unpacker);
+            g_cm->m_context_operator[ctx]->handle_query(dgi, ctx, dclass_id);
         }
     }
 
@@ -605,7 +601,6 @@ class DisneyClient : public Client, public NetworkHandler
             handle_client_object_location(dgi);
             break;
         case CLIENT_SET_AVATAR:
-            //handle_client_set_avatar(dgi);
             break;
         case CLIENT_GET_FRIEND_LIST:
             break;

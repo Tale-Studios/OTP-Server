@@ -38,7 +38,7 @@ class NameGenerator
     }
 
   protected:
-    std::map<int, std::pair<int, std::string> > m_name_map;
+    std::map<int16_t, std::pair<int, std::string> > m_name_map;
 };
 
 class ToontownClientManager; // forward declaration
@@ -110,7 +110,7 @@ class SetNameTypedOperation : virtual public AvatarOperation
     void post_account_func();
 
     // Verifies the toon's dclass & fields, then judges the name.
-    void handle_query(uint32_t ctx, uint16_t dclass_id, DCPacker &unpacker);
+    void handle_query(DatagramIterator &dgi, uint32_t ctx, uint16_t dclass_id);
 
     // Judges the name, updates the toon name fields, and sends a response.
     void judge_name();
@@ -134,7 +134,7 @@ class SetNamePatternOperation : virtual public AvatarOperation
     void post_account_func();
 
     // Verifies the toon's dclass & fields, then sets the name.
-    void handle_query(uint32_t ctx, uint16_t dclass_id, DCPacker &unpacker);
+    void handle_query(DatagramIterator &dgi, uint32_t ctx, uint16_t dclass_id);
 
     // Puts together the pattern into a name, updates the toon name fields, and sends a response.
     void set_name();
@@ -160,7 +160,7 @@ class ToontownClientManager : virtual public OTPClientManager
                           std::string database_file, std::string name_file);
 
     // Gathers together PotentialAvatar structs through packed fields & an avatar set.
-    std::vector<PotentialAvatar> get_potential_avatars(std::map<uint32_t, DCPacker> packed_fields, std::vector<uint32_t> av_set);
+    std::vector<PotentialAvatar> get_potential_avatars(std::map<uint32_t, nlohmann::json> packed_fields, std::vector<uint32_t> av_set);
 
     // Forms name patterns into a full name string.
     std::string create_name(std::vector<std::pair<int16_t, uint8_t> > patterns);
