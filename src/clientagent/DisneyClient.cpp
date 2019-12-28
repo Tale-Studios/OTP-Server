@@ -601,6 +601,8 @@ class DisneyClient : public Client, public NetworkHandler
             handle_client_object_location(dgi);
             break;
         case CLIENT_SET_AVATAR:
+            g_cm->request_play_avatar(*this, m_channel >> 32,
+                                      dgi.read_uint32(), false);
             break;
         case CLIENT_GET_FRIEND_LIST:
             break;
