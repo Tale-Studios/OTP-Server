@@ -631,14 +631,18 @@ class DisneyClient : public Client, public NetworkHandler
             }
 
             uint32_t av_id = dgi.read_uint32();
+
+            // A slight discrepancy caused by Disney:
+            // f1/f2/f3/f4 are supposed to be uint8, but the client
+            // sends everything as int16!
             int16_t p1 = dgi.read_int16();
-            uint8_t f1 = dgi.read_uint8();
-            int16_t p2 = dgi.read_int16();
-            uint8_t f2 = dgi.read_uint8();
-            int16_t p3 = dgi.read_int16();
-            uint8_t f3 = dgi.read_uint8();
-            int16_t p4 = dgi.read_int16();
-            uint8_t f4 = dgi.read_uint8();
+            uint8_t f1 = (uint8_t)dgi.read_int16();
+            int16_t p2 = (uint8_t)dgi.read_int16();
+            uint8_t f2 = (uint8_t)dgi.read_int16();
+            int16_t p3 = (uint8_t)dgi.read_int16();
+            uint8_t f3 = (uint8_t)dgi.read_int16();
+            int16_t p4 = (uint8_t)dgi.read_int16();
+            uint8_t f4 = (uint8_t)dgi.read_int16();
 
             g_ttcm->set_name_pattern(*this, m_channel >> 32, av_id, p1, f1,
                                      p2, f2, p3, f3, p4, f4);
