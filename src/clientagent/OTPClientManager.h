@@ -18,6 +18,22 @@ struct PotentialAvatar
     uint8_t index = 0;
 };
 
+// AvatarBasicInfo contains the basic info for an avatar.
+struct AvatarBasicInfo
+{
+    uint32_t av_id;
+    std::string name;
+    std::string dna_string;
+    uint32_t pet_id;
+};
+
+// AvatarBasicInfoCache contains an avatar's basic info and an expiration time.
+struct AvatarBasicInfoCache
+{
+    time_t expire;
+    AvatarBasicInfo info;
+};
+
 // Operator is a base class for any class defined here.
 class Operator
 {
@@ -32,6 +48,12 @@ class Operator
     virtual void handle_query(DatagramIterator &dgi, uint32_t ctx, uint16_t dclass_id);
     virtual void handle_update(uint32_t ctx, uint8_t success);
     virtual void handle_lookup(bool success, uint32_t account_id, std::string play_token);
+    virtual void get_activated_resp(uint32_t do_id, uint32_t ctx, bool activated);
+    virtual void friend_callback(bool success = 0, uint32_t av_id = 0,
+                                 nlohmann::json &fields = nlohmann::json({}), bool is_pet = 0,
+                                 std::vector<AvatarBasicInfo> friend_details = std::vector<AvatarBasicInfo>{},
+                                 std::vector<uint32_t> online_friends = std::vector<uint32_t>{},
+                                 bool online = 0);
 
   protected:
 
@@ -69,6 +91,12 @@ class Operator
     // Update field(s) on an object, optionally with the requirement that the
     // fields must match some old value.
     void update_object(uint32_t database_id, uint32_t do_id, DCClass *dclass, nlohmann::json &new_fields, nlohmann::json &old_fields);
+
+    // Checks if a database object has been activated.
+    void get_activated(uint32_t do_id);
+
+    // Dispatches a field update to an object.
+    void send_update(uint32_t do_id, DCClass *dclass, DCField *field, nlohmann::json &values);
 
     void warning(std::string text);
 
@@ -417,12 +445,12 @@ class OTPClientManager
                                std::string dna_string, uint8_t index);
 
     // Runs an AcknowledgeNameOperation.
-    void acknowledge_avatar_name(DisneyClient& client, uint32_t av_id);
+    void acknowledge_avatar_name(DisneyClient& client, uint32_t sender, uint32_t av_id);
 
     // Runs a RemoveAvatarOperation.
-    void request_remove_avatar(DisneyClient& client, uint32_t av_id);
+    void request_remove_avatar(DisneyClient& client, uint32_t sender, uint32_t av_id);
 
     // Runs either a LoadAvatarOperation or an UnloadAvatarOperation.
     void request_play_avatar(DisneyClient& client, uint32_t sender,
-                             uint32_t av_id, bool unload);
+                             uint32_t av_id, uint32_t curr_av_id);
 };

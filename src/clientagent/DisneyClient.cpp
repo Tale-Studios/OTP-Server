@@ -1,5 +1,4 @@
 #include "Client.h"
-#include "ClientMessages.h"
 #include "ClientFactory.h"
 #include "ClientAgent.h"
 #include "ToontownClientManager.h"
@@ -114,6 +113,16 @@ class DisneyClient : public Client, public NetworkHandler
     inline virtual void set_client_state(ClientState state)
     {
         m_state = state;
+    }
+
+    inline virtual uint32_t get_avatar_id()
+    {
+        return m_channel & 0xFFFFFFFF;
+    }
+
+    inline virtual uint32_t get_account_id()
+    {
+        return (m_channel >> 32) & 0xFFFFFFFF;
     }
 
     virtual void write_server_event(LoggedEvent& event)
@@ -330,7 +339,7 @@ class DisneyClient : public Client, public NetworkHandler
         bool multiple = i.zones.size() > 1;
 
         DatagramPtr resp = Datagram::create();
-        resp->add_uint16(multiple ? CLIENT_ADD_INTEREST_MULTIPLE : CLIENT_ADD_INTEREST);
+        resp->add_uint16(CLIENT_ADD_INTEREST);
         resp->add_uint32(context);
         resp->add_uint16(i.id);
         resp->add_doid(i.parent);
@@ -393,15 +402,9 @@ class DisneyClient : public Client, public NetworkHandler
         m_client->send_datagram(resp);
     }
 
-    // handle_set_fields should inform the client that a group of fields has been updated.
+    // handle_set_fields should inform the client that a group of fields has been updated. Not used.
     virtual void handle_set_fields(doid_t do_id, uint16_t num_fields, DatagramIterator &dgi)
     {
-        DatagramPtr resp = Datagram::create();
-        resp->add_uint16(CLIENT_OBJECT_SET_FIELDS);
-        resp->add_doid(do_id);
-        resp->add_uint16(num_fields);
-        resp->add_data(dgi.read_remainder());
-        m_client->send_datagram(resp);
     }
 
     // handle_change_location should inform the client that the objects location has changed.
@@ -497,6 +500,19 @@ class DisneyClient : public Client, public NetworkHandler
         }
     }
 
+    // handle_get_activated_resp occurs when the DBSS sends a DBSS_OBJECT_GET_ACTIVATED_RESP.
+    virtual void handle_get_activated_resp(DatagramIterator &dgi)
+    {
+        // Collect the information the DB server sent us.
+        uint32_t ctx = dgi.read_uint32();
+        uint32_t do_id = dgi.read_uint32();
+        bool activated = dgi.read_uint8() ? true : false;
+
+        if(g_cm->m_context_operator.find(ctx) != g_cm->m_context_operator.end()) {
+            g_cm->m_context_operator[ctx]->get_activated_resp(do_id, ctx, activated);
+        }
+    }
+
     // Custom handling for internally received datagrams.
     virtual bool handle_cluster_datagram(DatagramHandle in_dg, DatagramIterator &dgi,
                                          channel_t sender, uint16_t msgtype)
@@ -513,6 +529,9 @@ class DisneyClient : public Client, public NetworkHandler
             break;
         case DBSERVER_OBJECT_SET_FIELDS_IF_EQUALS_RESP:
             handle_set_field_resp(dgi);
+            break;
+        case DBSS_OBJECT_GET_ACTIVATED_RESP:
+            handle_get_activated_resp(dgi);
             break;
         default:
             return false;
@@ -601,10 +620,11 @@ class DisneyClient : public Client, public NetworkHandler
             handle_client_object_location(dgi);
             break;
         case CLIENT_SET_AVATAR:
-            g_cm->request_play_avatar(*this, m_channel >> 32,
-                                      dgi.read_uint32(), false);
+            g_cm->request_play_avatar(*this, get_account_id(),
+                                      dgi.read_uint32(), get_avatar_id());
             break;
         case CLIENT_GET_FRIEND_LIST:
+            g_ttcm->get_friends_list_request(*this, get_account_id(), get_avatar_id());
             break;
         case CLIENT_ADD_INTEREST:
             handle_client_add_interest(dgi, false);
@@ -617,7 +637,7 @@ class DisneyClient : public Client, public NetworkHandler
             string dna_string = dgi.read_string();
             uint8_t index = dgi.read_uint8();
 
-            g_cm->create_avatar(*this, m_channel >> 32,
+            g_cm->create_avatar(*this, get_account_id(),
                                 dna_string, index);
         }
         break;
@@ -644,7 +664,7 @@ class DisneyClient : public Client, public NetworkHandler
             int16_t p4 = (uint8_t)dgi.read_int16();
             uint8_t f4 = (uint8_t)dgi.read_int16();
 
-            g_ttcm->set_name_pattern(*this, m_channel >> 32, av_id, p1, f1,
+            g_ttcm->set_name_pattern(*this, get_account_id(), av_id, p1, f1,
                                      p2, f2, p3, f3, p4, f4);
         }
         break;
@@ -660,11 +680,11 @@ class DisneyClient : public Client, public NetworkHandler
             uint32_t av_id = dgi.read_uint32();
             string name = dgi.read_string();
 
-            g_ttcm->set_name_typed(*this, m_channel >> 32, av_id, name);
+            g_ttcm->set_name_typed(*this, get_account_id(), av_id, name);
         }
         break;
         case CLIENT_GET_AVATARS:
-            g_cm->request_avatar_list(*this, m_channel >> 32);
+            g_cm->request_avatar_list(*this, get_account_id());
             break;
         case CLIENT_HEARTBEAT:
             handle_client_heartbeat();

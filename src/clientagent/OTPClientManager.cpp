@@ -1,6 +1,6 @@
 #include "OTPClientManager.h"
 #include "DisneyClient.cpp"
-#include "ClientMessages.h"
+#include "DisneyClientMessages.h"
 #include "core/global.h"
 #include "core/msgtypes.h"
 #include "json/json.hpp"
@@ -383,9 +383,65 @@ void Operator::handle_update(uint32_t ctx, uint8_t success)
     m_manager->m_context_operator.erase(ctx);
 }
 
+void Operator::get_activated(uint32_t do_id)
+{
+    // Save the context:
+    unsigned int ctx = get_context();
+    m_contexts.push_back(ctx);
+    m_manager->m_context_operator[ctx] = this;
+
+    // Now generate and send the datagram:
+    DatagramPtr dg = Datagram::create();
+    dg->add_server_header(do_id, m_client.get_client_channel(), DBSS_OBJECT_GET_ACTIVATED);
+    dg->add_uint32(ctx);
+    dg->add_uint32(do_id);
+    m_client.dispatch_datagram(dg);
+}
+
+void Operator::get_activated_resp(uint32_t do_id, uint32_t ctx, bool activated)
+{
+    if(find(m_contexts.begin(), m_contexts.end(), ctx) == m_contexts.end()) {
+        warning(string("Received unexpected DBSS_OBJECT_GET_ACTIVATED_RESP (ctx ") + to_string(ctx) + ")");
+        return;
+    }
+
+    m_contexts.erase(remove(m_contexts.begin(), m_contexts.end(), ctx), m_contexts.end());
+    m_manager->m_context_operator.erase(ctx);
+}
+
 void Operator::handle_lookup(bool success, uint32_t account_id, string play_token)
 {
     // Must be handled by inheritor.
+}
+
+void Operator::friend_callback(bool success, uint32_t av_id,
+                               json &fields, bool is_pet,
+                               vector<AvatarBasicInfo> friend_details,
+                               vector<uint32_t> online_friends,
+                               bool online)
+{
+    // Must be handled by inheritor.
+}
+
+void Operator::send_update(uint32_t do_id, DCClass *dclass, DCField *field, json &values)
+{
+    DCPacker packer;
+
+    packer.raw_pack_uint8(1);
+    packer.RAW_PACK_CHANNEL(do_id);
+    packer.RAW_PACK_CHANNEL(m_client.get_client_channel());
+    packer.raw_pack_uint16(STATESERVER_OBJECT_SET_FIELD);
+    packer.raw_pack_uint32(do_id);
+    packer.raw_pack_uint16(field->get_number());
+
+    packer.begin_pack(field);
+    pack_json_objects(packer, dclass, values);
+    DatagramPtr dg = Datagram::create();
+    if(packer.end_pack()) {
+        dg->add_data(packer.get_string());
+    }
+
+    m_client.dispatch_datagram(dg);
 }
 
 void Operator::warning(string text)
@@ -1384,7 +1440,7 @@ void OTPClientManager::kill_account_operation(uint32_t account_id)
 bool OTPClientManager::run_operation(GameOperation* operation_type, uint32_t sender)
 {
     // First, check the sender.
-    if(sender < 1) {
+    if(sender == 0) {
         // If the sender doesn't exist, they're not
         // logged in, so kill the connection.
         kill_account(sender, "Client is not logged in.");
@@ -1420,28 +1476,39 @@ void OTPClientManager::create_avatar(DisneyClient& client, uint32_t sender, stri
     }
 }
 
-void OTPClientManager::acknowledge_avatar_name(DisneyClient& client, uint32_t av_id)
+void OTPClientManager::acknowledge_avatar_name(DisneyClient& client, uint32_t sender, uint32_t av_id)
 {
     AcknowledgeNameOperation* operation = new AcknowledgeNameOperation(this, client, av_id);
-    bool success = run_operation(operation, av_id);
+    bool success = run_operation(operation, sender);
     if(success) {
         operation->start(av_id);
     }
 }
 
-void OTPClientManager::request_remove_avatar(DisneyClient& client, uint32_t av_id)
+void OTPClientManager::request_remove_avatar(DisneyClient& client, uint32_t sender, uint32_t av_id)
 {
     RemoveAvatarOperation* operation = new RemoveAvatarOperation(this, client, av_id);
-    bool success = run_operation(operation, av_id);
+    bool success = run_operation(operation, sender);
     if(success) {
         operation->start(av_id);
     }
 }
 
-void OTPClientManager::request_play_avatar(DisneyClient& client, uint32_t sender, uint32_t av_id, bool unload)
+void OTPClientManager::request_play_avatar(DisneyClient& client, uint32_t sender,
+                                           uint32_t av_id, uint32_t curr_av_id)
 {
-    if(!unload) {
-        // If unload is not set, then we're running a LoadAvatarOperation.
+    if(curr_av_id != 0 && av_id != 0) {
+        // An avatar has already been chosen! Kill the account.
+        kill_account(sender, "An avatar is already chosen!");
+        return;
+    } else if(curr_av_id == 0 && av_id == 0) {
+        // The client is likely making sure that none of its
+        // avatars are active, so this isn't really an error.
+        return;
+    }
+
+    if(av_id != 0) {
+        // If we were given a valid avatar id, then we're running a LoadAvatarOperation.
         LoadAvatarOperation* operation = new LoadAvatarOperation(this, client, sender);
         bool success = run_operation(operation, sender);
         if(success) {
@@ -1452,7 +1519,7 @@ void OTPClientManager::request_play_avatar(DisneyClient& client, uint32_t sender
         UnloadAvatarOperation* operation = new UnloadAvatarOperation(this, client, sender);
         bool success = run_operation(operation, sender);
         if(success) {
-            operation->start(av_id);
+            operation->start(curr_av_id);
         }
     }
 }
