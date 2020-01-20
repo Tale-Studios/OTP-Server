@@ -50,7 +50,8 @@ class Operator
     virtual void handle_lookup(bool success, uint32_t account_id, std::string play_token);
     virtual void get_activated_resp(uint32_t do_id, uint32_t ctx, bool activated);
     virtual void friend_callback(bool success = 0, uint32_t av_id = 0,
-                                 nlohmann::json &fields = nlohmann::json({}), bool is_pet = 0,
+                                 nlohmann::json &fields = nlohmann::json({}),
+                                 DatagramHandle dg = Datagram::create(), bool is_pet = 0,
                                  std::vector<AvatarBasicInfo> friend_details = std::vector<AvatarBasicInfo>{},
                                  std::vector<uint32_t> online_friends = std::vector<uint32_t>{},
                                  bool online = 0);
@@ -68,10 +69,10 @@ class Operator
     }
 
     // Packs a particular JSON object into a DCPacker.
-    void pack_json_object(DCPacker &packer, std::string field_name, nlohmann::json &object);
+    void pack_json_object(DCPacker &packer, std::string field_name, nlohmann::json &object, size_t parameters = -1, bool is_field = 0);
 
     // Packs all given fields in a JSON object into a DCPacker.
-    void pack_json_objects(DCPacker &packer, DCClass *dclass, nlohmann::json &object);
+    void pack_json_objects(DCPacker &packer, DCClass *dclass, nlohmann::json &object, bool raw = 1);
 
     // Unpacks a particular element in a DCPacker into a JSON object.
     void unpack_json_object(DCPacker &unpacker, std::string field_name, nlohmann::json &object);

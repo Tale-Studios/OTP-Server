@@ -179,6 +179,7 @@ class GetAvatarInfoOperation : virtual public GameOperation
     uint32_t m_sender_av_id;
     uint32_t m_av_id;
     bool m_is_pet;
+    DatagramHandle m_field_dg;
     nlohmann::json m_fields;
 };
 
@@ -203,7 +204,8 @@ class GetFriendsListOperation : virtual public GameOperation
 
     // Collects the details of each individual friend.
     void friend_callback(bool success = 0, uint32_t av_id = 0,
-                         nlohmann::json &fields = nlohmann::json({}), bool is_pet = 0,
+                         nlohmann::json &fields = nlohmann::json({}),
+                         DatagramHandle dg = Datagram::create(), bool is_pet = 0,
                          std::vector<AvatarBasicInfo> friend_details = std::vector<AvatarBasicInfo>{},
                          std::vector<uint32_t> online_friends = std::vector<uint32_t>{},
                          bool online = 0);
@@ -276,7 +278,8 @@ class ToontownFriendOperator : virtual public Operator
 
     // Calls a callback function depending on the operation name.
     void friend_callback(bool success = 0, uint32_t av_id = 0,
-                         nlohmann::json &fields = nlohmann::json({}), bool is_pet = 0,
+                         nlohmann::json &fields = nlohmann::json({}),
+                         DatagramHandle dg = Datagram::create(), bool is_pet = 0,
                          std::vector<AvatarBasicInfo> friend_details = std::vector<AvatarBasicInfo>{},
                          std::vector<uint32_t> online_friends = std::vector<uint32_t>{},
                          bool online = 0);
@@ -286,6 +289,10 @@ class ToontownFriendOperator : virtual public Operator
     void got_friends_list(bool success, uint32_t av_id,
                           std::vector<AvatarBasicInfo> friend_details,
                           std::vector<uint32_t> online_friends);
+
+    // Sends the avatar/pet details to the avatar.
+    void got_avatar_details(bool success, uint32_t av_id, DatagramHandle dg,
+                            nlohmann::json &fields, bool is_pet);
 
     std::string m_op_name;
 };
@@ -325,4 +332,8 @@ class ToontownClientManager : virtual public OTPClientManager
 
     // Runs a GetFriendsListOperation.
     void get_friends_list_request(DisneyClient& client, uint32_t sender, uint32_t av_id);
+
+    // Runs a GetAvatarInfoOperation (for both avatars & pets).
+    void get_avatar_details_request(DisneyClient& client, uint32_t sender,
+                                    uint32_t av_id, uint32_t sender_av_id);
 };

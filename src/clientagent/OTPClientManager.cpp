@@ -4,6 +4,7 @@
 #include "core/global.h"
 #include "core/msgtypes.h"
 #include "json/json.hpp"
+#include "dclass/dcAtomicField.h"
 
 using namespace std;
 using json = nlohmann::json;
@@ -18,7 +19,7 @@ Operator::~Operator()
 {
 }
 
-void Operator::pack_json_object(DCPacker &packer, string field_name, json &object)
+void Operator::pack_json_object(DCPacker &packer, string field_name, json &object, size_t parameters, bool is_field)
 {
     // Get the current pack type.
     DCPackType pack_type = packer.get_pack_type();
@@ -29,11 +30,13 @@ void Operator::pack_json_object(DCPacker &packer, string field_name, json &objec
     // seeing if stoi() fails on field_name (this could be checked better).
     json value;
     if(pack_type != PT_field) {
-        try {
-            stoi(field_name);
-            value = object[stoi(field_name)];
-        } catch(invalid_argument) {
-            value = object[field_name];
+        if(!is_field || pack_type != PT_array) {
+            try {
+                stoi(field_name);
+                value = object[stoi(field_name)];
+            } catch(invalid_argument) {
+                value = object[field_name];
+            }
         }
     }
 
@@ -74,8 +77,14 @@ void Operator::pack_json_object(DCPacker &packer, string field_name, json &objec
         case PT_array: {
             packer.push();
 
-            for(size_t i = 0; i < value.size(); ++i) {
-                pack_json_object(packer, to_string(i), value);
+            if(is_field) {
+                for(size_t i = 0; i < object.size(); ++i) {
+                    pack_json_object(packer, to_string(i), object);
+                }
+            } else {
+                for(size_t i = 0; i < value.size(); ++i) {
+                    pack_json_object(packer, to_string(i), value);
+                }
             }
 
             packer.pop();
@@ -84,8 +93,13 @@ void Operator::pack_json_object(DCPacker &packer, string field_name, json &objec
         case PT_field: {
             packer.push();
 
-            for(size_t i = 0; i < object[field_name].size(); ++i) {
-                pack_json_object(packer, to_string(i), object[field_name]);
+            size_t s = object[field_name].size();
+            if(parameters != -1) {
+                s = parameters;
+            }
+
+            for(size_t i = 0; i < s; ++i) {
+                pack_json_object(packer, to_string(i), object[field_name], 0, true);
             }
 
             packer.pop();
@@ -96,7 +110,7 @@ void Operator::pack_json_object(DCPacker &packer, string field_name, json &objec
     }
 }
 
-void Operator::pack_json_objects(DCPacker &packer, DCClass *dclass, json &object)
+void Operator::pack_json_objects(DCPacker &packer, DCClass *dclass, json &object, bool raw)
 {
     // Iterate over each field.
     for(auto& it : object.items()) {
@@ -104,18 +118,55 @@ void Operator::pack_json_objects(DCPacker &packer, DCClass *dclass, json &object
         DCField *field = dclass->get_field_by_name(it.key());
         if(field == nullptr) {
             warning("Bad field when packing JSON objects!");
-            return;
+            continue;
         }
 
         // Begin packing the field.
-        packer.raw_pack_uint16(field->get_number());
+        if(raw) {
+            packer.raw_pack_uint16(field->get_number());
+        }
         packer.begin_pack(field);
 
+        // Make sure we don't have any null values.
+        // If we do, just pack a default value ourselves.
+        bool done = false;
+        if(it.value() == nullptr) {
+            done = true;
+        }
+        for(auto& el : it.value().items()) {
+            if(el.value() == nullptr) {
+                done = true;
+                break;
+            }
+            for(auto& ell : el.value().items()) {
+                if(ell.value() == nullptr) {
+                    done = true;
+                    break;
+                }
+            }
+        }
+        if(done) {
+            // Pack a default value and end this iteration.
+            packer.pack_default_value();
+            packer.end_pack();
+            object.erase(it.key());
+            continue;
+        }
+
+        size_t parameters = -1;
+
+        if(field->as_atomic_field() != nullptr) {
+            parameters = field->as_atomic_field()->get_num_elements();
+        }
+
         // Pack the object.
-        pack_json_object(packer, it.key(), object);
+        pack_json_object(packer, it.key(), object, parameters);
 
         // Stop packing the field.
         packer.end_pack();
+
+        // Remove the key from our json object.
+        object.erase(it.key());
     }
 }
 
@@ -223,7 +274,7 @@ json Operator::unpack_json_objects(DatagramIterator &dgi, DCClass *dclass, size_
         DCField *field = dclass->get_field_by_index(field_id);
         if(field == nullptr) {
             warning("Bad field when unpacking JSON objects!");
-            return fields;
+            continue;
         }
 
         // Get the field name.
@@ -415,7 +466,7 @@ void Operator::handle_lookup(bool success, uint32_t account_id, string play_toke
 }
 
 void Operator::friend_callback(bool success, uint32_t av_id,
-                               json &fields, bool is_pet,
+                               json &fields, DatagramHandle dg, bool is_pet,
                                vector<AvatarBasicInfo> friend_details,
                                vector<uint32_t> online_friends,
                                bool online)
@@ -1070,11 +1121,17 @@ void AcknowledgeNameOperation::post_account_func()
 
 void AcknowledgeNameOperation::handle_query(DatagramIterator &dgi, uint32_t ctx, uint16_t dclass_id)
 {
+    if(!m_past_acc_query) {
+        // Not our turn yet.
+        AvatarOperation::handle_query(dgi, ctx, dclass_id);
+        return;
+    }
+
     AvatarOperation::handle_query(dgi, ctx, dclass_id);
 
     if(m_manager->m_player_class->get_number() != dclass_id) {
         // This dclass is not a valid avatar! Kill the connection.
-        kill("One of the account's avatars is invalid!");
+        kill(string("One of the account's avatars is invalid! dclass = ") + to_string(dclass_id) + ", expected = " + to_string(m_manager->m_player_class->get_number()));
         return;
     }
 
@@ -1234,11 +1291,17 @@ void LoadAvatarOperation::post_account_func()
 
 void LoadAvatarOperation::handle_query(DatagramIterator &dgi, uint32_t ctx, uint16_t dclass_id)
 {
+    if(!m_past_acc_query) {
+        // Not our turn yet.
+        AvatarOperation::handle_query(dgi, ctx, dclass_id);
+        return;
+    }
+
     AvatarOperation::handle_query(dgi, ctx, dclass_id);
 
     if(m_manager->m_player_class->get_number() != dclass_id) {
         // This dclass is not a valid avatar! Kill the connection.
-        kill("One of the account's avatars is invalid!");
+        kill(string("One of the account's avatars is invalid! dclass = ") + to_string(dclass_id) + ", expected = " + to_string(m_manager->m_player_class->get_number()));
         return;
     }
 
@@ -1427,7 +1490,7 @@ void OTPClientManager::kill_connection_operation(channel_t connection_id)
 
 void OTPClientManager::kill_account(uint32_t account_id, string reason)
 {
-    kill_connection(account_id + ((int64_t)1003L << 32), reason);
+    m_account2operation[account_id]->m_client.send_disconnect(122, reason);
 }
 
 void OTPClientManager::kill_account_operation(uint32_t account_id)
