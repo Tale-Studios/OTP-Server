@@ -49,12 +49,6 @@ class Operator
     virtual void handle_update(uint32_t ctx, uint8_t success);
     virtual void handle_lookup(bool success, uint32_t account_id, std::string play_token);
     virtual void get_activated_resp(uint32_t do_id, uint32_t ctx, bool activated);
-    virtual void friend_callback(bool success = 0, uint32_t av_id = 0,
-                                 nlohmann::json &fields = nlohmann::json({}),
-                                 DatagramHandle dg = Datagram::create(), bool is_pet = 0,
-                                 std::vector<AvatarBasicInfo> friend_details = std::vector<AvatarBasicInfo>{},
-                                 std::vector<uint32_t> online_friends = std::vector<uint32_t>{},
-                                 bool online = 0);
 
   protected:
 
