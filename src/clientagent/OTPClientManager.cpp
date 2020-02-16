@@ -419,6 +419,15 @@ void Operator::handle_lookup(bool success, uint32_t account_id, string play_toke
     // Must be handled by inheritor.
 }
 
+void Operator::friend_callback(bool success, uint32_t av_id,
+                               json &fields, DatagramHandle dg, bool is_pet,
+                               vector<AvatarBasicInfo> friend_details,
+                               vector<uint32_t> online_friends,
+                               bool online)
+{
+    // Must be handled by inheritor.
+}
+
 void Operator::send_update(uint32_t do_id, DCClass *dclass, DCField *field, json &values)
 {
     DCPacker packer;

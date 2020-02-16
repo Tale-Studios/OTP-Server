@@ -709,16 +709,14 @@ class DisneyClient : public Client, public NetworkHandler
         case CLIENT_REMOVE_FRIEND: {
         }
         break;
-        case CLIENT_GET_FRIEND_LIST: {
-        }
-        break;
-        case CLIENT_GET_FRIEND_LIST_EXTENDED: {
-        }
-        break;
+        case CLIENT_GET_FRIEND_LIST:
+            g_ttcm->get_friends_list_request(*this, get_account_id(), get_avatar_id());
+            break;
         case CLIENT_GET_AVATAR_DETAILS:
-        case CLIENT_GET_PET_DETAILS: {
-        }
-        break;
+        case CLIENT_GET_PET_DETAILS:
+            g_ttcm->get_avatar_details_request(*this, get_account_id(),
+                                               dgi.read_uint32(), get_avatar_id());
+            break;
         case CLIENT_ADD_INTEREST:
             handle_client_add_interest(dgi, false);
             break;

@@ -487,6 +487,377 @@ void SetNamePatternOperation::set_name()
     off();
 }
 
+GetAvatarInfoOperation::GetAvatarInfoOperation(ToontownClientManager *manager, DisneyClient& client, Operator *op,
+                                               uint32_t target, uint32_t sender_av_id, uint32_t av_id) :
+    GameOperation(manager, client, target), Operator(manager, client),
+    m_op(op), m_sender_av_id(sender_av_id),
+    m_av_id(av_id), m_is_pet(false), m_ttmgr(manager)
+{
+}
+
+GetAvatarInfoOperation::~GetAvatarInfoOperation()
+{
+}
+
+void GetAvatarInfoOperation::start()
+{
+    get_avatar_info();
+}
+
+void GetAvatarInfoOperation::get_avatar_info()
+{
+    query_object(m_manager->m_database_id, m_av_id);
+}
+
+void GetAvatarInfoOperation::handle_query(DatagramIterator &dgi, uint32_t ctx, uint16_t dclass_id)
+{
+    Operator::handle_query(dgi, ctx, dclass_id);
+
+    DCClass* pet_class = g_dcf->get_class_by_name("DistributedPet");
+
+    if(m_manager->m_player_class->get_number() != dclass_id &&
+       pet_class->get_number() != dclass_id) {
+        // This dclass is not a valid pet or avatar! We failed.
+        failure("Invalid dclass for avId: " + to_string(m_av_id));
+        return;
+    }
+
+    m_is_pet = dclass_id == pet_class->get_number();
+    uint16_t field_count = dgi.read_uint16();
+
+    m_field_dg = Datagram::create(dgi.get_remaining_bytes());
+
+    // Unpack the fields and store them.
+    if(m_is_pet) {
+        m_fields = unpack_json_objects(dgi, pet_class, field_count);
+    } else {
+        m_fields = unpack_json_objects(dgi, m_manager->m_player_class, field_count);
+    }
+
+    m_fields["avId"] = m_av_id;
+    finished();
+}
+
+void GetAvatarInfoOperation::finished()
+{
+    if(!m_is_pet) {
+        AvatarBasicInfoCache c_info = AvatarBasicInfoCache();
+        AvatarBasicInfo av_info = AvatarBasicInfo();
+        c_info.expire = chrono::system_clock::now().time_since_epoch().count() + 3600;
+        av_info.name = m_fields["setName"].get<vector<string> >()[0];
+        av_info.av_id = m_av_id;
+        av_info.dna_string = m_fields["setDNAString"].get<vector<string> >()[0];
+        av_info.pet_id = m_fields["setPetId"].get<vector<uint32_t> >()[0];
+        c_info.info = av_info;
+        m_ttmgr->m_av_basic_info_cache[m_av_id] = c_info;
+    }
+
+    m_op->friend_callback(true, m_sender_av_id, m_fields, m_field_dg, m_is_pet);
+
+    off();
+}
+
+void GetAvatarInfoOperation::failure(string reason)
+{
+    warning(reason);
+    m_op->friend_callback();
+
+    off();
+}
+
+GetFriendsListOperation::GetFriendsListOperation(ToontownClientManager *manager, DisneyClient& client,
+                                                 Operator *op, uint32_t target, uint32_t av_id) :
+    GameOperation(manager, client, target), Operator(manager, client),
+    m_op(op), m_ttmgr(manager), m_av_id(av_id), m_iterated(0)
+{
+}
+
+GetFriendsListOperation::~GetFriendsListOperation()
+{
+}
+
+void GetFriendsListOperation::start()
+{
+    get_friends_list();
+}
+
+void GetFriendsListOperation::get_friends_list()
+{
+    query_object(m_manager->m_database_id, m_av_id);
+}
+
+void GetFriendsListOperation::handle_query(DatagramIterator &dgi, uint32_t ctx, uint16_t dclass_id)
+{
+    Operator::handle_query(dgi, ctx, dclass_id);
+
+    if(m_manager->m_player_class->get_number() != dclass_id) {
+        // This dclass is not a valid avatar.
+        failure("Invalid dclass for avId: " + to_string(m_av_id));
+        return;
+    }
+
+    uint16_t field_count = dgi.read_uint16();
+    json fields = unpack_json_objects(dgi, m_manager->m_player_class, field_count);
+    json friend_list = fields["setFriendsList"][0];
+    for(auto& el : friend_list.items()) {
+        m_friends_list.push_back(el.value()[0]);
+    }
+    get_friend_details();
+}
+
+void GetFriendsListOperation::get_friend_details()
+{
+    if(m_friends_list.size() <= 0) {
+        m_op->friend_callback(0, m_av_id);
+        off();
+        return;
+    }
+
+    for(uint32_t friend_id : m_friends_list) {
+        if(m_ttmgr->m_av_basic_info_cache.find(friend_id) != m_ttmgr->m_av_basic_info_cache.end()) {
+            AvatarBasicInfoCache& c_info = m_ttmgr->m_av_basic_info_cache[friend_id];
+            time_t expire = c_info.expire;
+            AvatarBasicInfo& av_info = c_info.info;
+            if(expire > chrono::system_clock::now().time_since_epoch().count()) {
+                m_friend_details.push_back(av_info);
+                ++m_iterated;
+                test_finished();
+                continue;
+            } else {
+                m_ttmgr->m_av_basic_info_cache.erase(friend_id);
+            }
+        }
+
+        GetAvatarInfoOperation* new_operation = new GetAvatarInfoOperation(m_ttmgr, m_client, this, (uint32_t)m_target, m_av_id, friend_id);
+        new_operation->start();
+        m_operations[friend_id] = new_operation;
+    }
+}
+
+void GetFriendsListOperation::friend_callback(bool success, uint32_t av_id,
+                                              json &fields, DatagramHandle dg, bool is_pet,
+                                              vector<AvatarBasicInfo> friend_details,
+                                              vector<uint32_t> online_friends,
+                                              bool online)
+{
+    uint32_t given_av_id = fields["avId"].get<uint32_t>();
+
+    if(m_operations.find(given_av_id) != m_operations.end()) {
+        m_operations.erase(given_av_id);
+    }
+
+    if(!success) {
+        failure("GetFriendsListOperation friend_callback received unsuccessful callback, avId: " + to_string(m_av_id));
+        return;
+    }
+
+    if(av_id != m_av_id) {
+        failure("GetFriendsListOperation friend_callback response for wrong requester. wrongId=" + to_string(m_av_id) +
+                " rightId=" + to_string(av_id));
+        return;
+    }
+
+    ++m_iterated;
+
+    AvatarBasicInfo info;
+    info.av_id = given_av_id;
+    info.name = fields["setName"].get<vector<string> >()[0];
+    info.dna_string = fields["setDNAString"].get<vector<string> >()[0];
+    info.pet_id = fields["setPetId"].get<vector<uint32_t> >()[0];
+    m_friend_details.push_back(info);
+    test_finished();
+}
+
+void GetFriendsListOperation::test_finished()
+{
+    if(m_iterated >= m_friends_list.size() && m_operations.size() == 0) {
+        check_friends_online();
+    }
+}
+
+void GetFriendsListOperation::check_friends_online()
+{
+    m_iterated = 0;
+    for(uint32_t friend_id : m_friends_list) {
+        get_activated(friend_id);
+    }
+}
+
+void GetFriendsListOperation::get_activated_resp(uint32_t do_id, uint32_t ctx, bool activated)
+{
+    Operator::get_activated_resp(do_id, ctx, activated);
+
+    ++m_iterated;
+    if(activated) {
+        m_online_friends.push_back(do_id);
+    }
+
+    if(m_iterated == m_friends_list.size()) {
+        finished();
+    }
+}
+
+void GetFriendsListOperation::finished()
+{
+    m_op->friend_callback(true, m_av_id, json({}), Datagram::create(), 0, m_friend_details, m_online_friends);
+
+    off();
+}
+
+void GetFriendsListOperation::failure(string reason)
+{
+    warning(reason);
+    m_op->friend_callback(0, m_av_id);
+
+    off();
+}
+
+UpdateAvatarFieldOperation::UpdateAvatarFieldOperation(ToontownClientManager *manager, DisneyClient& client, Operator *op,
+                                                       uint32_t target, uint32_t sender_av_id, uint32_t av_id) :
+    GameOperation(manager, client, target), Operator(manager, client),
+    m_op(op), m_online(false), m_sender_av_id(sender_av_id), m_av_id(av_id)
+{
+}
+
+UpdateAvatarFieldOperation::~UpdateAvatarFieldOperation()
+{
+}
+
+void UpdateAvatarFieldOperation::start(string field, vector<uint32_t> value)
+{
+    m_field = field;
+    m_value = value;
+    get_avatar_online();
+}
+
+void UpdateAvatarFieldOperation::get_avatar_online()
+{
+    get_activated(m_av_id);
+}
+
+void UpdateAvatarFieldOperation::get_activated_resp(uint32_t do_id, uint32_t ctx, bool activated)
+{
+    Operator::get_activated_resp(do_id, ctx, activated);
+
+    m_online = activated;
+    update_avatar_field();
+}
+
+void UpdateAvatarFieldOperation::update_avatar_field()
+{
+    if(m_online) {
+        send_update(m_av_id, m_manager->m_player_class,
+                    m_manager->m_player_class->get_field_by_name(m_field),
+                    json({{m_field, {m_value}}}));
+    } else {
+        update_object(m_manager->m_database_id, m_av_id, m_manager->m_player_class, json({{m_field, {m_value}}}), json({}));
+    }
+
+    finished();
+}
+
+void UpdateAvatarFieldOperation::finished()
+{
+    m_op->friend_callback(true, m_sender_av_id, json({}), Datagram::create(),
+                          0, vector<AvatarBasicInfo>{}, vector<uint32_t>{}, m_online);
+
+    off();
+}
+
+void UpdateAvatarFieldOperation::failure(string reason)
+{
+    warning(reason);
+    m_op->friend_callback();
+
+    off();
+}
+
+ToontownFriendOperator::ToontownFriendOperator(ToontownClientManager *manager, DisneyClient& client, string op_name) :
+    Operator(manager, client), m_op_name(op_name)
+{
+}
+
+ToontownFriendOperator::~ToontownFriendOperator()
+{
+}
+
+void ToontownFriendOperator::friend_callback(bool success, uint32_t av_id,
+                                             json &fields, DatagramHandle dg, bool is_pet,
+                                             vector<AvatarBasicInfo> friend_details,
+                                             vector<uint32_t> online_friends,
+                                             bool online)
+{
+    if(m_op_name == "GFL") {
+        got_friends_list(success, av_id, friend_details, online_friends);
+    } else if(m_op_name == "GAI") {
+        got_avatar_details(success, av_id, dg, fields, is_pet);
+    }
+}
+
+void ToontownFriendOperator::got_friends_list(bool success, uint32_t av_id,
+                                              vector<AvatarBasicInfo> friend_details,
+                                              vector<uint32_t> online_friends)
+{
+    if(!success) {
+        return;
+    }
+
+    for(uint32_t friend_id : online_friends) {
+        DatagramPtr dg = Datagram::create();
+        dg->add_uint16(CLIENT_FRIEND_ONLINE);
+        dg->add_uint32(friend_id);
+        dg->add_uint8(0);
+        dg->add_uint8(1);
+        m_client.forward_datagram(dg);
+    }
+
+
+    DatagramPtr datagram = Datagram::create();
+    datagram->add_uint16(CLIENT_GET_FRIEND_LIST_RESP);
+    datagram->add_uint8(0);
+    datagram->add_uint16(friend_details.size());
+    for(auto info : friend_details) {
+        datagram->add_uint32(info.av_id);
+        datagram->add_string(info.name);
+        datagram->add_string(info.dna_string);
+        datagram->add_uint32(info.pet_id);
+    }
+    m_client.forward_datagram(datagram);
+}
+
+void ToontownFriendOperator::got_avatar_details(bool success, uint32_t av_id, DatagramHandle dg,
+                                                json &fields, bool is_pet)
+{
+    uint32_t to_av_id = fields["avId"].get<uint32_t>();
+    fields.erase("avId");
+
+    if(!success) {
+        DatagramPtr datagram = Datagram::create();
+        if(is_pet) {
+            datagram->add_uint16(CLIENT_GET_PET_DETAILS_RESP);
+        } else {
+            datagram->add_uint16(CLIENT_GET_AVATAR_DETAILS_RESP);
+        }
+        datagram->add_uint32(to_av_id);
+        datagram->add_uint8(1);
+        m_client.forward_datagram(datagram);
+        return;
+    }
+
+    DCClass *dclass = is_pet ? g_dcf->get_class_by_name("DistributedPet") : m_manager->m_player_class;
+
+    DatagramPtr datagram = Datagram::create();
+    if(is_pet) {
+        datagram->add_uint16(CLIENT_GET_PET_DETAILS_RESP);
+    } else {
+        datagram->add_uint16(CLIENT_GET_AVATAR_DETAILS_RESP);
+    }
+    datagram->add_uint32(to_av_id);
+    datagram->add_uint8(0);
+    datagram->add_data(dg->get_data(), dg->size());
+    m_client.forward_datagram(datagram);
+}
+
 ToontownClientManager::ToontownClientManager(DCClass* player_class, uint32_t database_id, string database_type,
                                              string database_file, string name_file) :
     OTPClientManager(player_class, database_id, 6, database_type, database_file)
@@ -599,5 +970,27 @@ void ToontownClientManager::set_name_pattern(DisneyClient& client, uint32_t send
     bool success = run_operation(operation, sender);
     if(success) {
         operation->start(av_id, p1, f1, p2, f2, p3, f3, p4, f4);
+    }
+}
+
+void ToontownClientManager::get_friends_list_request(DisneyClient& client, uint32_t sender, uint32_t av_id)
+{
+    ToontownFriendOperator* op = new ToontownFriendOperator(this, client, "GFL");
+    GetFriendsListOperation* operation = new GetFriendsListOperation(this, client, op, sender, av_id);
+    bool success = run_operation(operation, sender);
+    if(success) {
+        operation->start();
+    }
+}
+
+void ToontownClientManager::get_avatar_details_request(DisneyClient& client, uint32_t sender,
+                                                       uint32_t av_id, uint32_t sender_av_id)
+{
+    ToontownFriendOperator* op = new ToontownFriendOperator(this, client, "GAI");
+    GetAvatarInfoOperation* operation = new GetAvatarInfoOperation(this, client, op,
+                                                                   sender, sender_av_id, av_id);
+    bool success = run_operation(operation, sender);
+    if(success) {
+        operation->start();
     }
 }

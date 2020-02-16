@@ -151,6 +151,152 @@ class SetNamePatternOperation : virtual public AvatarOperation
     uint8_t m_f4;
 };
 
+class GetAvatarInfoOperation : virtual public GameOperation
+{
+  public:
+    GetAvatarInfoOperation(ToontownClientManager *manager, DisneyClient& client, Operator *op,
+                           uint32_t target, uint32_t sender_av_id, uint32_t av_id);
+    virtual ~GetAvatarInfoOperation();
+
+    // Starts the operation.
+    void start();
+
+    // Queries the avatar (or pet) fields.
+    void get_avatar_info();
+
+    // Collects & verifies the fields.
+    void handle_query(DatagramIterator &dgi, uint32_t ctx, uint16_t dclass_id);
+
+    // Finishes the operation.
+    void finished();
+
+    // Finishes the operation with a failure.
+    void failure(std::string reason);
+
+  protected:
+    ToontownClientManager *m_ttmgr;
+    Operator *m_op;
+    uint32_t m_sender_av_id;
+    uint32_t m_av_id;
+    bool m_is_pet;
+    DatagramHandle m_field_dg;
+    nlohmann::json m_fields;
+};
+
+class GetFriendsListOperation : virtual public GameOperation
+{
+  public:
+    GetFriendsListOperation(ToontownClientManager *manager, DisneyClient& client,
+                            Operator *op, uint32_t target, uint32_t av_id);
+    virtual ~GetFriendsListOperation();
+
+    // Starts the operation.
+    void start();
+
+    // Queries the avatar for the friends list.
+    void get_friends_list();
+
+    // Collects the friends list from the fields.
+    void handle_query(DatagramIterator &dgi, uint32_t ctx, uint16_t dclass_id);
+
+    // Iterates over the friends list & retrieves the info for each friend.
+    void get_friend_details();
+
+    // Collects the details of each individual friend.
+    void friend_callback(bool success = 0, uint32_t av_id = 0,
+                         nlohmann::json &fields = nlohmann::json({}),
+                         DatagramHandle dg = Datagram::create(), bool is_pet = 0,
+                         std::vector<AvatarBasicInfo> friend_details = std::vector<AvatarBasicInfo>{},
+                         std::vector<uint32_t> online_friends = std::vector<uint32_t>{},
+                         bool online = 0);
+
+    // Checks if we're ready to see if the friends are online.
+    void test_finished();
+
+    // Checks if each friend is online.
+    void check_friends_online();
+
+    // Receives the activation query response for each friend.
+    void get_activated_resp(uint32_t do_id, uint32_t ctx, bool activated);
+
+    // Completes the operation.
+    void finished();
+
+    // Fails the operation.
+    void failure(std::string reason);
+
+  protected:
+    ToontownClientManager *m_ttmgr;
+    Operator *m_op;
+    uint32_t m_av_id;
+    std::vector<AvatarBasicInfo> m_friend_details;
+    size_t m_iterated;
+    std::map<uint32_t, GetAvatarInfoOperation*> m_operations;
+    std::vector<uint32_t> m_online_friends;
+    std::vector<uint32_t> m_friends_list;
+};
+
+class UpdateAvatarFieldOperation : virtual public GameOperation
+{
+  public:
+    UpdateAvatarFieldOperation(ToontownClientManager *manager, DisneyClient& client, Operator *op,
+                               uint32_t target, uint32_t sender_av_id, uint32_t av_id);
+    virtual ~UpdateAvatarFieldOperation();
+
+    // Starts the operation with the field & value.
+    void start(std::string field, std::vector<uint32_t> value);
+
+    // Checks if the avatar is online.
+    void get_avatar_online();
+
+    // Receives the activation query response for the avatar.
+    void get_activated_resp(uint32_t do_id, uint32_t ctx, bool activated);
+
+    // Updates the avatar field.
+    void update_avatar_field();
+
+    // Completes the operation.
+    void finished();
+
+    // Fails the operation.
+    void failure(std::string reason);
+
+  protected:
+    Operator *m_op;
+    uint32_t m_sender_av_id;
+    uint32_t m_av_id;
+    std::string m_field;
+    std::vector<uint32_t> m_value;
+    bool m_online;
+};
+
+class ToontownFriendOperator : virtual public Operator
+{
+  public:
+    ToontownFriendOperator(ToontownClientManager *manager, DisneyClient& client, std::string op_name);
+    virtual ~ToontownFriendOperator();
+
+    // Calls a callback function depending on the operation name.
+    void friend_callback(bool success = 0, uint32_t av_id = 0,
+                         nlohmann::json &fields = nlohmann::json({}),
+                         DatagramHandle dg = Datagram::create(), bool is_pet = 0,
+                         std::vector<AvatarBasicInfo> friend_details = std::vector<AvatarBasicInfo>{},
+                         std::vector<uint32_t> online_friends = std::vector<uint32_t>{},
+                         bool online = 0);
+
+  private:
+    // Sends the friends list response to the avatar.
+    void got_friends_list(bool success, uint32_t av_id,
+                          std::vector<AvatarBasicInfo> friend_details,
+                          std::vector<uint32_t> online_friends);
+
+    // Sends the avatar/pet details to the avatar.
+    void got_avatar_details(bool success, uint32_t av_id, DatagramHandle dg,
+                            nlohmann::json &fields, bool is_pet);
+
+    std::string m_op_name;
+};
+
 class ToontownClientManager : virtual public OTPClientManager
 {
   public:
@@ -183,4 +329,11 @@ class ToontownClientManager : virtual public OTPClientManager
     void set_name_pattern(DisneyClient& client, uint32_t sender, uint32_t av_id,
                           int16_t p1, uint8_t f1, int16_t p2, uint8_t f2,
                           int16_t p3, uint8_t f3, int16_t p4, uint8_t f4);
+
+    // Runs a GetFriendsListOperation.
+    void get_friends_list_request(DisneyClient& client, uint32_t sender, uint32_t av_id);
+
+    // Runs a GetAvatarInfoOperation (for both avatars & pets).
+    void get_avatar_details_request(DisneyClient& client, uint32_t sender,
+                                    uint32_t av_id, uint32_t sender_av_id);
 };
