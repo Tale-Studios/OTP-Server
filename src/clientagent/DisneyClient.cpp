@@ -623,11 +623,30 @@ class DisneyClient : public Client, public NetworkHandler
             g_cm->request_play_avatar(*this, get_account_id(),
                                       dgi.read_uint32(), get_avatar_id());
             break;
-        case CLIENT_GET_FRIEND_LIST:
-            break;
+        case CLIENT_REMOVE_FRIEND: {
+            DatagramPtr dg = Datagram::create(4501, m_channel, DBSERVER_SET_STORED_VALUES);
+            dg->add_data(dgi.read_remainder());
+            route_datagram(dg);
+        }
+        break;
+        case CLIENT_GET_FRIEND_LIST: {
+            DatagramPtr dg = Datagram::create(4501, m_channel, DBSERVER_GET_STORED_VALUES);
+            route_datagram(dg);
+        }
+        break;
+        case CLIENT_GET_FRIEND_LIST_EXTENDED: {
+            DatagramPtr dg = Datagram::create(4501, m_channel, DBSERVER_GET_STORED_VALUES);
+            dg->add_data(dgi.read_remainder());
+            route_datagram(dg);
+        }
+        break;
         case CLIENT_GET_AVATAR_DETAILS:
-        case CLIENT_GET_PET_DETAILS:
-            break;
+        case CLIENT_GET_PET_DETAILS: {
+            DatagramPtr dg = Datagram::create(4501, m_channel, STATESERVER_OBJECT_QUERY_FIELDS);
+            dg->add_data(dgi.read_remainder());
+            route_datagram(dg);
+        }
+        break;
         case CLIENT_ADD_INTEREST:
             handle_client_add_interest(dgi, false);
             break;
@@ -861,6 +880,22 @@ class DisneyClient : public Client, public NetworkHandler
 
         // Get the new DatagramIterator.
         DatagramIterator new_dgi = DatagramIterator(dg);
+
+        // If we're Toontown, then we actually want to reroute interest requests
+        // to the server so it can take into account viszones.
+        if(m_game_name == "toon" && parent_id != 4618 && zones.size() == 1) {
+            if(*(zones.begin()) >= 1000) {
+                DatagramPtr datagram = Datagram::create(4630, m_channel, CLIENT_AGENT_SET_INTEREST);
+                datagram->add_uint16(handle);
+                datagram->add_doid(parent_id);
+                datagram->add_uint16(zones.size());
+                for(auto zone : zones) {
+                    datagram->add_zone(zone);
+                }
+                route_datagram(datagram);
+                return;
+            }
+        }
 
         Interest i;
         build_interest(new_dgi, true, i);
