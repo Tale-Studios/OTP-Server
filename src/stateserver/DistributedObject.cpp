@@ -915,6 +915,24 @@ void DistributedObject::handle_datagram(DatagramHandle, DatagramIterator &dgi)
         route_datagram(dg);
         break;
     }
+    case STATESERVER_BOUNCE_MESSAGE: {
+        vector<string> messages;
+
+        // Iterate over sent messages
+        while(dgi.get_remaining() > 0) {
+            messages.push_back(dgi.read_string());
+        }
+
+        // Dispatch each message
+        for(auto message : messages) {
+            DatagramPtr dg = Datagram::create(message);
+            DatagramIterator dgi(dg);
+            dgi.seek(1 + sizeof(channel_t)); // Ignore server header junk
+            handle_datagram(dg, dgi);
+        }
+
+        break;
+    }
     default:
         if(msgtype < STATESERVER_MSGTYPE_MIN || msgtype > STATESERVER_MSGTYPE_MAX) {
             m_log->warning() << "Received unknown message of type " << msgtype << ".\n";
