@@ -238,12 +238,9 @@ void Client::add_interest(Interest &i, uint32_t context, channel_t caller)
         // We aren't requesting any new zones with this operation, so don't
         // bother firing off a State Server request. Instead, let the caller
         // know we're already done:
-        if(caller == m_channel)
-        {
+        if(caller == m_channel) {
             handle_interest_done(i.id, context);
-        }
-        else
-        {
+        } else {
             notify_interest_done(i.id, caller);
         }
 
@@ -939,8 +936,7 @@ void InterestOperation::finish()
     // Distribute the interest done message.
     if(m_caller == m_client->m_channel) {
         m_client->handle_interest_done(m_interest_id, m_client_context);
-    }
-    else {
+    } else {
         m_client->notify_interest_done(m_interest_id, m_caller);
     }
 
