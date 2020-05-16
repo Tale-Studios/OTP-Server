@@ -250,6 +250,14 @@ if(BUILD_CLIENTAGENT)
     endif()
 endif()
 
+set(BUILD_BUNGEECORD ON CACHE BOOL "If on, Bungee Cord will be built into binary")
+if(BUILD_BUNGEECORD)
+    set(BUNGEECORD_FILES
+        src/bungeecord/BungeeCord.cpp
+        src/bungeecord/BungeeCord.h
+    )
+endif()
+
 ### Define core components ###
 set(CORE_FILES
     src/core/global.h
@@ -322,6 +330,7 @@ add_executable(otp_server
     ${STATESERVER_FILES}
     ${EVENTLOGGER_FILES}
     ${CLIENTAGENT_FILES}
+    ${BUNGEECORD_FILES}
     ${DBSERVER_FILES}
 )
 
@@ -342,6 +351,10 @@ endif()
 if(CLIENTAGENT_FILES)
     add_definitions(-DBUILD_CLIENTAGENT)
     source_group("ClientAgent" FILES ${CLIENTAGENT_FILES})
+endif()
+if(BUNGEECORD_FILES)
+    add_definitions(-DBUILD_BUNGEECORD)
+    source_group("BungeeCord" FILES ${BUNGEECORD_FILES})
 endif()
 if(DBSERVER_FILES)
     add_definitions(-DBUILD_STATESERVER_DBSS)

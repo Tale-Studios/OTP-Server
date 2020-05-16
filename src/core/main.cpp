@@ -328,6 +328,10 @@ void printCompiledOptions(ostream &s)
       "Client Agent, "
 #endif
 
+#ifdef BUILD_BUNGEECORD
+      "Bungee Cord, "
+#endif
+
 #ifdef BUILD_DBSERVER
       "Database "
 
