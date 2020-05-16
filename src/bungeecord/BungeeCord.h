@@ -11,10 +11,24 @@
 
 // BungeeCord is a role in the daemon that sends and receives packets from a TCP socket
 // between another BungeeCord on a different OTP cluster.
-class BungeeCord : public Role
+class BungeeCord : public Role, public NetworkHandler
 {
   public:
     BungeeCord(RoleConfig roleconfig);
+    ~BungeeCord();
+
+    void initialize()
+    {
+        // Stub method for NetworkClient.
+    }
+
+    // receive_datagram is called when we have received a datagram
+    // from the other end.
+    void receive_datagram(DatagramHandle dg);
+
+    // receive_disconnect is called when the other end closes
+    // the connection or the connection is lost.
+    void receive_disconnect(const uvw::ErrorEvent& evt);
 
     // handle_datagram receives messages from our own cluster
     // to relay across the cord.
@@ -36,8 +50,14 @@ class BungeeCord : public Role
     void on_connect(const std::shared_ptr<uvw::TcpHandle> &socket);
     void on_connect_error(const uvw::ErrorEvent& evt);
 
+    // Whether we are binding to a port or connecting to a server.
+    bool m_connecting;
+
+    // Whether we are connected or not:
+    bool m_connected;
+
     std::unique_ptr<LogCategory> m_log;
     std::unique_ptr<NetworkAcceptor> m_net_acceptor;
     std::shared_ptr<NetworkConnector> m_connector;
-    //std::shared_ptr<NetworkClient> m_client;
+    std::shared_ptr<NetworkClient> m_client;
 };

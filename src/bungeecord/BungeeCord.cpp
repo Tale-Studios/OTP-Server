@@ -15,7 +15,8 @@ static ValidAddressConstraint valid_bind_addr(bind_addr);
 static ValidAddressConstraint valid_connect_addr(connect_addr);
 
 BungeeCord::BungeeCord(RoleConfig roleconfig) : Role(roleconfig),
-    m_net_acceptor(nullptr), m_connector(nullptr)//, m_client(nullptr)
+    m_net_acceptor(nullptr), m_connector(nullptr), m_client(nullptr),
+    m_connecting(false), m_connected(false)
 {
     // Get our channel we've been assigned to:
     channel_t channel = control_channel.get_rval(m_roleconfig);
@@ -31,6 +32,13 @@ BungeeCord::BungeeCord(RoleConfig roleconfig) : Role(roleconfig),
 
         // Initialize our cord.
         init_cord();
+    }
+}
+
+BungeeCord::~BungeeCord()
+{
+    if(m_connected) {
+        m_client->disconnect();
     }
 }
 
@@ -58,10 +66,12 @@ void BungeeCord::init_cord()
     if(connect_addr.get_rval(m_roleconfig) != "unspecified") {
         m_log->info() << "Connecting to server..." << std::endl;
 
+        m_connecting = true;
+
         ConnectCallback callback = std::bind(&BungeeCord::on_connect, this, std::placeholders::_1);
         ConnectErrorCallback err_callback = std::bind(&BungeeCord::on_connect_error, this, std::placeholders::_1);
 
-        //m_client = std::make_shared<NetworkClient>();
+        m_client = std::make_shared<NetworkClient>(this);
         m_connector = std::make_shared<NetworkConnector>(g_loop);
         m_connector->connect(connect_addr.get_rval(m_roleconfig), 7192, callback, err_callback);
     }
@@ -72,8 +82,20 @@ void BungeeCord::handle_connection(const std::shared_ptr<uvw::TcpHandle> &socket
                                    const uvw::Addr &local,
                                    const bool haproxy_mode)
 {
+    if(m_connected) {
+        // We're already connected...
+        m_log->error() << "Got a redundant incoming connection from "
+                       << remote.ip << ":" << remote.port << "\n";
+        return;
+    }
+
     m_log->info() << "Got an incoming connection from "
                   << remote.ip << ":" << remote.port << "\n";
+
+    m_connected = true;
+
+    m_client = std::make_shared<NetworkClient>(this);
+    m_client->initialize(socket);
 }
 
 void BungeeCord::handle_error(const uvw::ErrorEvent& evt)
@@ -95,8 +117,10 @@ void BungeeCord::on_connect(const std::shared_ptr<uvw::TcpHandle> &socket)
 
     m_log->info() << "Successfully connected to server\n";
 
+    m_connected = true;
+
     // Initialize the NetworkClient.
-    //m_client->initialize(socket);
+    m_client->initialize(socket);
 
     // Destroy the NetworkConnector we used to connect to the server.
     m_connector->destroy();
@@ -108,6 +132,24 @@ void BungeeCord::on_connect_error(const uvw::ErrorEvent& evt)
     // We failed to connect. Fall over and die.
     m_log->fatal() << "Failed to connect to address: " << evt.what() << "\n";
     terminate();
+}
+
+void BungeeCord::receive_datagram(DatagramHandle dg)
+{
+    DatagramIterator dgi(dg);
+}
+
+void BungeeCord::receive_disconnect(const uvw::ErrorEvent& evt)
+{
+    m_connected = false;
+
+    m_log->fatal() << "Lost connection to other end: " << evt.what() << "\n";
+
+    // If we're connecting, we just want to shut down:
+    if(m_connecting) {
+        terminate();
+        return;
+    }
 }
 
 void BungeeCord::handle_datagram(DatagramHandle, DatagramIterator &dgi)
