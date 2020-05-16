@@ -137,6 +137,21 @@ void BungeeCord::on_connect_error(const uvw::ErrorEvent& evt)
 void BungeeCord::receive_datagram(DatagramHandle dg)
 {
     DatagramIterator dgi(dg);
+    dgi.seek_payload();
+    channel_t sender = dgi.read_channel();
+    uint16_t msgtype = dgi.read_uint16();
+    switch(msgtype) {
+    case BUNGEECORD_ROUTE_MESSAGE: {
+        // Put together the datagram:
+        DatagramPtr datagram = Datagram::create(dgi.read_string());
+
+        // Route it:
+        route_datagram(datagram);
+        break;
+    }
+    default:
+        m_log->warning() << "Received unknown message over the cord: msgtype=" << msgtype << std::endl;
+    }
 }
 
 void BungeeCord::receive_disconnect(const uvw::ErrorEvent& evt)
@@ -152,13 +167,24 @@ void BungeeCord::receive_disconnect(const uvw::ErrorEvent& evt)
     }
 }
 
-void BungeeCord::handle_datagram(DatagramHandle, DatagramIterator &dgi)
+void BungeeCord::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
 {
     channel_t sender = dgi.read_channel();
     uint16_t msgtype = dgi.read_uint16();
     switch(msgtype) {
+    case BUNGEECORD_ROUTE_MESSAGE: {
+        // If we aren't connected, we can't route a message to anything:
+        if(!m_connected) {
+            m_log->warning() << "Received route message when not connected.\n";
+            break;
+        }
+
+        // Route the message:
+        m_client->send_datagram(in_dg);
+        break;
+    }
     default:
-        m_log->warning() << "Received unknown message: msgtype=" << msgtype << std::endl;
+        m_log->warning() << "Received unknown internal message: msgtype=" << msgtype << std::endl;
     }
 }
 

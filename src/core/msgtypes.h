@@ -149,4 +149,7 @@ enum MessageTypes {
     DBSERVER_OBJECT_DELETE_FIELD              = 3030,
     DBSERVER_OBJECT_DELETE_FIELDS             = 3031,
     DBSERVER_OBJECT_DELETE                    = 3032,
+
+    // BungeeCord messages
+    BUNGEECORD_ROUTE_MESSAGE = 4000,
 };
