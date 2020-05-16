@@ -152,4 +152,5 @@ enum MessageTypes {
 
     // BungeeCord messages
     BUNGEECORD_ROUTE_MESSAGE = 4000,
+    BUNGEECORD_ROUTE_MESSAGES = 4001,
 };

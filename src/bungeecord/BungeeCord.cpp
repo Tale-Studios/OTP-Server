@@ -149,6 +149,21 @@ void BungeeCord::receive_datagram(DatagramHandle dg)
         route_datagram(datagram);
         break;
     }
+    case BUNGEECORD_ROUTE_MESSAGES: {
+        vector<string> messages;
+
+        // Iterate over sent messages
+        while(dgi.get_remaining() > 0) {
+            messages.push_back(dgi.read_string());
+        }
+
+        // Route each message
+        for(auto message : messages) {
+            DatagramPtr datagram = Datagram::create(message);
+            route_datagram(datagram);
+        }
+        break;
+    }
     default:
         m_log->warning() << "Received unknown message over the cord: msgtype=" << msgtype << std::endl;
     }
@@ -169,16 +184,17 @@ void BungeeCord::receive_disconnect(const uvw::ErrorEvent& evt)
 
 void BungeeCord::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
 {
+    // If we aren't connected, we can't route a message to anything:
+    if(!m_connected) {
+        m_log->warning() << "Received route message when not connected.\n";
+        return;
+    }
+
     channel_t sender = dgi.read_channel();
     uint16_t msgtype = dgi.read_uint16();
     switch(msgtype) {
-    case BUNGEECORD_ROUTE_MESSAGE: {
-        // If we aren't connected, we can't route a message to anything:
-        if(!m_connected) {
-            m_log->warning() << "Received route message when not connected.\n";
-            break;
-        }
-
+    case BUNGEECORD_ROUTE_MESSAGE:
+    case BUNGEECORD_ROUTE_MESSAGES: {
         // Route the message:
         m_client->send_datagram(in_dg);
         break;
