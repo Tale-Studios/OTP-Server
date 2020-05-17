@@ -249,7 +249,7 @@ void Client::add_interest(Interest &i, uint32_t context, channel_t caller)
 
     uint32_t request_context = m_next_context++;
 
-    InterestOperation *iop = new InterestOperation(this,
+    InterestOperation *iop = new InterestOperation(this, m_client_agent->m_interest_timeout,
             i.id, context, request_context, i.parent, new_zones, caller);
     m_pending_interests.emplace(request_context, iop);
 
@@ -884,7 +884,7 @@ void Client::notify_interest_done(uint16_t interest_id, channel_t caller)
  *       HELPER CLASSES       *
  * ========================== */
 InterestOperation::InterestOperation(
-    Client *client,
+    Client *client, unsigned long timeout,
     uint16_t interest_id, uint32_t client_context, uint32_t request_context,
     doid_t parent, unordered_set<zone_t> zones, channel_t caller) :
     m_client(client),
@@ -892,12 +892,41 @@ InterestOperation::InterestOperation(
     m_client_context(client_context),
     m_request_context(request_context),
     m_parent(parent), m_zones(zones),
-    m_caller(caller)
+    m_caller(caller), m_timeout_interval(timeout)
 {
+    m_client->generate_timeout(bind(&InterestOperation::on_timeout_generate, this,
+                               std::placeholders::_1));
 }
 
-void InterestOperation::finish()
+void InterestOperation::on_timeout_generate(Timeout* timeout)
 {
+    assert(std::this_thread::get_id() == g_main_thread_id);
+
+    m_timeout = timeout;
+    m_timeout->initialize(m_timeout_interval, bind(&InterestOperation::timeout, this));
+    m_timeout->start();
+}
+
+void InterestOperation::timeout()
+{
+    lock_guard<recursive_mutex> lock(m_client->m_client_lock);
+    m_client->m_log->warning() << "Interest operation timed out; forcing.\n";
+    finish(true);
+}
+
+void InterestOperation::finish(bool is_timeout)
+{
+    if(!is_timeout && m_timeout != nullptr) {
+        if(!m_timeout->cancel()) {
+            // The timeout is already running; let it clean up instead.
+            return;
+        }
+
+        // We've already invoked cancel on the m_timeout object:
+        // It's gonna get around to deleting itself as soon as the async operation runs, so it's not safe to hold onto its pointer.
+        m_timeout = nullptr;
+    }
+
     // Make a temporary map of DC ID->generate set.
     map<uint16_t, set<DatagramHandle> > dc_map;
 

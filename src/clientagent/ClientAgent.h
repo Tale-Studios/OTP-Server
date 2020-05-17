@@ -68,4 +68,6 @@ class ClientAgent final : public Role
     ConfigNode m_clientconfig;
     std::unique_ptr<LogCategory> m_log;
     uint32_t m_hash;
+
+    unsigned long m_interest_timeout;
 };
