@@ -81,6 +81,7 @@ class InterestOperation
     InterestOperation(Client *client, unsigned long timeout,
                       uint16_t interest_id, uint32_t client_context, uint32_t request_context,
                       doid_t parent, std::unordered_set<zone_t> zones, channel_t caller);
+    ~InterestOperation();
 
     bool is_ready();
     void set_expected(doid_t total);

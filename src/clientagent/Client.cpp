@@ -898,6 +898,10 @@ InterestOperation::InterestOperation(
                                std::placeholders::_1));
 }
 
+InterestOperation::~InterestOperation()
+{
+}
+
 void InterestOperation::on_timeout_generate(Timeout* timeout)
 {
     assert(std::this_thread::get_id() == g_main_thread_id);
