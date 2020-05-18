@@ -41,9 +41,7 @@ class BungeeCord : public Role, public NetworkHandler
 
     // Server connection:
     void handle_connection(const std::shared_ptr<uvw::TcpHandle> &socket,
-                           const uvw::Addr &remote,
-                           const uvw::Addr &local,
-                           const bool haproxy_mode);
+                           const uvw::Addr &remote);
     void handle_error(const uvw::ErrorEvent& evt);
 
     // Client connection:

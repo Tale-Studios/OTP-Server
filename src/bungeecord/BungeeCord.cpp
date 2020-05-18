@@ -15,8 +15,8 @@ static ValidAddressConstraint valid_bind_addr(bind_addr);
 static ValidAddressConstraint valid_connect_addr(connect_addr);
 
 BungeeCord::BungeeCord(RoleConfig roleconfig) : Role(roleconfig),
-    m_net_acceptor(nullptr), m_connector(nullptr), m_client(nullptr),
-    m_connecting(false), m_connected(false)
+    m_connecting(false), m_connected(false),
+    m_net_acceptor(nullptr), m_connector(nullptr), m_client(nullptr)
 {
     // Get our channel we've been assigned to:
     channel_t channel = control_channel.get_rval(m_roleconfig);
@@ -48,9 +48,7 @@ void BungeeCord::init_cord()
     if(bind_addr.get_rval(m_roleconfig) != "unspecified") {
         TcpAcceptorCallback callback = std::bind(&BungeeCord::handle_connection,
                                                  this, std::placeholders::_1,
-                                                 std::placeholders::_2,
-                                                 std::placeholders::_3,
-                                                 std::placeholders::_4);
+                                                 std::placeholders::_2);
 
         AcceptorErrorCallback err_callback = std::bind(&BungeeCord::handle_error,
                                                        this, std::placeholders::_1);
@@ -77,10 +75,7 @@ void BungeeCord::init_cord()
     }
 }
 
-void BungeeCord::handle_connection(const std::shared_ptr<uvw::TcpHandle> &socket,
-                                   const uvw::Addr &remote,
-                                   const uvw::Addr &local,
-                                   const bool haproxy_mode)
+void BungeeCord::handle_connection(const std::shared_ptr<uvw::TcpHandle> &socket, const uvw::Addr &remote)
 {
     if(m_connected) {
         // We're already connected...
@@ -138,7 +133,7 @@ void BungeeCord::receive_datagram(DatagramHandle dg)
 {
     DatagramIterator dgi(dg);
     dgi.seek_payload();
-    channel_t sender = dgi.read_channel();
+    dgi.skip(sizeof(channel_t));
     uint16_t msgtype = dgi.read_uint16();
     switch(msgtype) {
     case BUNGEECORD_ROUTE_MESSAGE: {
@@ -190,7 +185,7 @@ void BungeeCord::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
         return;
     }
 
-    channel_t sender = dgi.read_channel();
+    dgi.skip(sizeof(channel_t));
     uint16_t msgtype = dgi.read_uint16();
     switch(msgtype) {
     case BUNGEECORD_ROUTE_MESSAGE:
