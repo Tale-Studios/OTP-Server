@@ -594,6 +594,55 @@ void DistributedObject::handle_datagram(DatagramHandle, DatagramIterator &dgi)
 
         break;
     }
+    case STATESERVER_OBJECT_DELETE_ZONE:
+    case STATESERVER_OBJECT_DELETE_ZONES: {
+        if(m_do_id != dgi.read_uint32()) {
+            m_log->warning() << " received delete zone request for wrong parent.\n";
+            break; // Wrong parent!
+        }
+
+        // Collect all doids to delete based on the zones we've received.
+        unordered_set<doid_t> doids;
+        if(msgtype == STATESERVER_OBJECT_DELETE_ZONE) {
+            uint16_t zone = dgi.read_zone();
+            if(m_zone_objects.find(zone) == m_zone_objects.end()) {
+                // We don't know this zone!
+                m_log->warning() << " received delete zone request for zone " << zone
+                                 << " that we don't know.\n";
+                return;
+            }
+
+            // Insert each child from the zone.
+            for(auto& do_id : m_zone_objects[zone]) {
+                doids.insert(do_id);
+            }
+        } else {
+            uint16_t zone_count = dgi.read_uint16();
+            for(uint16_t i = 0; i < zone_count; ++i) {
+                uint16_t zone = dgi.read_zone();
+                if(m_zone_objects.find(zone) == m_zone_objects.end()) {
+                    // We don't know this zone!
+                    m_log->warning() << " received delete zone request for zone " << zone
+                                     << " that we don't know.\n";
+                    continue;
+                }
+
+                // Insert each object from the zone.
+                for(auto& do_id : m_zone_objects[zone]) {
+                    doids.insert(do_id);
+                }
+            }
+        }
+
+        // Dispatch a message to kill all the objects in each zone.
+        for(auto& do_id : doids) {
+            DatagramPtr dg = Datagram::create(do_id, m_do_id, STATESERVER_OBJECT_DELETE_RAM);
+            dg->add_uint32(do_id);
+            route_datagram(dg);
+        }
+
+        break;
+    }
     case STATESERVER_OBJECT_DELETE_RAM: {
         if(m_do_id != dgi.read_doid()) {
             if(m_deletion_process) {
