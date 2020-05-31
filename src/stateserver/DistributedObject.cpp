@@ -915,6 +915,21 @@ void DistributedObject::handle_datagram(DatagramHandle, DatagramIterator &dgi)
 
         break;
     }
+    case STATESERVER_OBJECT_GET_CHILD_COUNT: {
+        uint32_t context = dgi.read_uint32();
+
+        // Get the child count.
+        doid_t child_count = 0;
+        for(auto kv : m_zone_objects) {
+            child_count += m_zone_objects[kv.first].size();
+        }
+
+        // Send the response with the number of children.
+        DatagramPtr dg = Datagram::create(sender, m_do_id, STATESERVER_OBJECT_GET_CHILD_COUNT_RESP);
+        dg->add_doid(child_count);
+        route_datagram(dg);
+        break;
+    }
 
     // zones in OTP don't have meaning to the cluster itself
     // as such, there is no table of zones to query in the network
