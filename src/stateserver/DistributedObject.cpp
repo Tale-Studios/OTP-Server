@@ -152,9 +152,9 @@ void DistributedObject::send_interest_entry(channel_t location, uint32_t context
     route_datagram(dg);
 }
 
-void DistributedObject::send_location_entry(channel_t location)
+void DistributedObject::send_location_entry(unordered_set<channel_t> targets)
 {
-    DatagramPtr dg = Datagram::create(location, m_do_id, m_ram_fields.size() ?
+    DatagramPtr dg = Datagram::create(targets, m_do_id, m_ram_fields.size() ?
                                       STATESERVER_OBJECT_ENTER_LOCATION_WITH_REQUIRED_OTHER :
                                       STATESERVER_OBJECT_ENTER_LOCATION_WITH_REQUIRED);
     append_required_data(dg, true);
@@ -217,6 +217,8 @@ void DistributedObject::handle_location_change(doid_t new_parent, zone_t new_zon
             targets.insert(old_parent);
             // Notify old location of changing location
             targets.insert(location_as_channel(old_parent, old_zone));
+            // Notify object channel of changing location
+            targets.insert(object_as_channel(old_parent, m_do_id));
         }
 
         m_parent_id = new_parent;
@@ -241,6 +243,8 @@ void DistributedObject::handle_location_change(doid_t new_parent, zone_t new_zon
         targets.insert(m_parent_id);
         // Notify old location of changing location
         targets.insert(location_as_channel(m_parent_id, old_zone));
+        // Notify object channel of changing location
+        targets.insert(object_as_channel(m_parent_id, m_do_id));
     } else {
         return; // Not actually changing location, no need to handle.
     }
@@ -258,7 +262,10 @@ void DistributedObject::handle_location_change(doid_t new_parent, zone_t new_zon
 
     // Send enter location message
     if(new_parent) {
-        send_location_entry(location_as_channel(new_parent, new_zone));
+        unordered_set<channel_t> locations;
+        locations.insert(location_as_channel(new_parent, new_zone));
+        locations.insert(object_as_channel(new_parent, m_do_id));
+        send_location_entry(locations);
     }
 }
 
@@ -294,7 +301,6 @@ void DistributedObject::handle_ai_change(channel_t new_ai, channel_t sender,
         m_log->trace() << "Sending AI entry to " << new_ai << ".\n";
         send_ai_entry(new_ai);
     }
-
 }
 
 void DistributedObject::begin_delete(bool ai_deletion)
@@ -349,6 +355,7 @@ void DistributedObject::finish_delete(bool notify_parent, bool ai_deletion)
             route_datagram(dg);
         }
         targets.insert(location_as_channel(m_parent_id, m_zone_id));
+        targets.insert(object_as_channel(m_parent_id, m_do_id));
     }
     if(m_owner_channel) {
         targets.insert(m_owner_channel);
@@ -433,6 +440,7 @@ bool DistributedObject::handle_one_update(DatagramIterator &dgi, channel_t sende
     unordered_set<channel_t> targets;
     if(field->is_broadcast()) {
         targets.insert(location_as_channel(m_parent_id, m_zone_id));
+        targets.insert(object_as_channel(m_parent_id, m_do_id));
     }
     if(field->is_airecv() && m_ai_channel && m_ai_channel != sender) {
         targets.insert(m_ai_channel);
@@ -488,6 +496,81 @@ bool DistributedObject::handle_one_get(DatagramPtr out, uint16_t field_id,
     }
 
     return true;
+}
+
+void DistributedObject::handle_object_query(DatagramIterator &dgi, uint16_t msg_type,
+                                            channel_t sender, bool do_id, bool multiple)
+{
+    uint32_t context = dgi.read_uint32();
+    doid_t queried_parent = dgi.read_doid();
+
+    m_log->trace() << "Handling object query with parent '" << queried_parent << "'"
+                   << ".  My id is " << m_do_id << " and my parent is " << m_parent_id
+                   << ".\n";
+
+    uint16_t count = 1;
+    if(multiple) {
+        count = dgi.read_uint16();
+    }
+
+    if(queried_parent == m_parent_id) {
+        // Query was relayed from parent! See if we match any of the zones
+        // and if so, reply:
+        for(uint16_t i = 0; i < count; ++i) {
+            if(do_id && (dgi.read_doid() == m_do_id) ||
+               !do_id && (dgi.read_zone() == m_zone_id)) {
+                // The parent forwarding this request down to us may or may
+                // not yet know about our presence (and therefore have us
+                // included in the count that it sent to the interested
+                // peer). If we are included in this count, we reply with a
+                // normal interest entry. If not, we reply with a standard
+                // location entry and allow the interested peer to resolve
+                // the difference itself.
+                if(m_parent_synchronized) {
+                    send_interest_entry(sender, context);
+                } else {
+                    send_location_entry(unordered_set<channel_t>{sender});
+                }
+                break;
+            }
+        }
+    } else if(queried_parent == m_do_id) {
+        doid_t child_count = 0;
+
+        // Start datagram to relay to children
+        DatagramPtr child_dg = Datagram::create(parent_to_children(m_do_id), sender, msg_type);
+        child_dg->add_uint32(context);
+        child_dg->add_doid(queried_parent);
+        child_dg->add_uint16(count);
+
+        if(do_id) {
+            // Get all doids requested:
+            for(int i = 0; i < count; ++i) {
+                child_count++;
+                child_dg->add_doid(dgi.read_doid());
+            }
+        } else {
+            // Get all zones requested:
+            for(int i = 0; i < count; ++i) {
+                zone_t zone = dgi.read_zone();
+                child_count += m_zone_objects[zone].size();
+                child_dg->add_zone(zone);
+            }
+        }
+
+        // Reply to requestor with count of objects expected
+        DatagramPtr count_dg = Datagram::create(sender, m_do_id, STATESERVER_OBJECT_GET_COUNT_RESP);
+        count_dg->add_uint32(context);
+        count_dg->add_doid(child_count);
+        route_datagram(count_dg);
+
+        // Bounce the message down to all children and have them decide
+        // whether or not to reply.
+        // TODO: Is this really that efficient?
+        if(child_count > 0) {
+            route_datagram(child_dg);
+        }
+    }
 }
 
 void DistributedObject::handle_datagram(DatagramHandle, DatagramIterator &dgi)
@@ -818,70 +901,15 @@ void DistributedObject::handle_datagram(DatagramHandle, DatagramIterator &dgi)
         m_log->trace() << "... updated owner.\n";
         break;
     }
+    case STATESERVER_OBJECT_GET_CHILDREN: {
+        handle_object_query(dgi, STATESERVER_OBJECT_GET_CHILDREN, sender, true, true);
+
+        break;
+    }
     case STATESERVER_OBJECT_GET_ZONE_OBJECTS:
     case STATESERVER_OBJECT_GET_ZONES_OBJECTS: {
-        uint32_t context = dgi.read_uint32();
-        doid_t queried_parent = dgi.read_doid();
-
-        m_log->trace() << "Handling get_zones_objects with parent '" << queried_parent << "'"
-                       << ".  My id is " << m_do_id << " and my parent is " << m_parent_id
-                       << ".\n";
-
-        uint16_t zone_count = 1;
-        if(msgtype == STATESERVER_OBJECT_GET_ZONES_OBJECTS) {
-            zone_count = dgi.read_uint16();
-        }
-
-        if(queried_parent == m_parent_id) {
-            // Query was relayed from parent! See if we match any of the zones
-            // and if so, reply:
-            for(uint16_t i = 0; i < zone_count; ++i) {
-                if(dgi.read_zone() == m_zone_id) {
-                    // The parent forwarding this request down to us may or may
-                    // not yet know about our presence (and therefore have us
-                    // included in the count that it sent to the interested
-                    // peer). If we are included in this count, we reply with a
-                    // normal interest entry. If not, we reply with a standard
-                    // location entry and allow the interested peer to resolve
-                    // the difference itself.
-                    if(m_parent_synchronized) {
-                        send_interest_entry(sender, context);
-                    } else {
-                        send_location_entry(sender);
-                    }
-                    break;
-                }
-            }
-        } else if(queried_parent == m_do_id) {
-            doid_t child_count = 0;
-
-            // Start datagram to relay to children
-            DatagramPtr child_dg = Datagram::create(parent_to_children(m_do_id), sender,
-                                                    STATESERVER_OBJECT_GET_ZONES_OBJECTS);
-            child_dg->add_uint32(context);
-            child_dg->add_doid(queried_parent);
-            child_dg->add_uint16(zone_count);
-
-            // Get all zones requested
-            for(int i = 0; i < zone_count; ++i) {
-                zone_t zone = dgi.read_zone();
-                child_count += m_zone_objects[zone].size();
-                child_dg->add_zone(zone);
-            }
-
-            // Reply to requestor with count of objects expected
-            DatagramPtr count_dg = Datagram::create(sender, m_do_id, STATESERVER_OBJECT_GET_ZONES_COUNT_RESP);
-            count_dg->add_uint32(context);
-            count_dg->add_doid(child_count);
-            route_datagram(count_dg);
-
-            // Bounce the message down to all children and have them decide
-            // whether or not to reply.
-            // TODO: Is this really that efficient?
-            if(child_count > 0) {
-                route_datagram(child_dg);
-            }
-        }
+        handle_object_query(dgi, STATESERVER_OBJECT_GET_ZONES_OBJECTS, sender,
+                            false, msgtype == STATESERVER_OBJECT_GET_ZONES_OBJECTS);
 
         break;
     }

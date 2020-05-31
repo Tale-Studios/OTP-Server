@@ -301,17 +301,34 @@ class OTPClient : public Client, public NetworkHandler
     virtual void handle_add_interest(const Interest& i, uint32_t context)
     {
         bool multiple = i.zones.size() > 1;
+        bool direct = i.doids.size() > 0;
 
         DatagramPtr resp = Datagram::create();
-        resp->add_uint16(multiple ? CLIENT_ADD_INTEREST_MULTIPLE : CLIENT_ADD_INTEREST);
+        if(direct) {
+            resp->add_uint16(CLIENT_ADD_INTEREST_OBJECTS);
+        } else {
+            resp->add_uint16(multiple ? CLIENT_ADD_INTEREST_MULTIPLE : CLIENT_ADD_INTEREST);
+        }
         resp->add_uint32(context);
         resp->add_uint16(i.id);
         resp->add_doid(i.parent);
-        if(multiple) {
-            resp->add_uint16(i.zones.size());
-        }
-        for(auto it = i.zones.begin(); it != i.zones.end(); ++it) {
-            resp->add_zone(*it);
+
+        if(direct) {
+            // If this is a direct object interest, send the amount
+            // of objects and each doid.
+            resp->add_uint16(i.doids.size());
+            for(auto it = i.doids.begin(); it != i.doids.end(); ++it) {
+                resp->add_doid(*it);
+            }
+        } else {
+            // Otherwise, send the amount of zones (if multiple),
+            // and each zone.
+            if(multiple) {
+                resp->add_uint16(i.zones.size());
+            }
+            for(auto it = i.zones.begin(); it != i.zones.end(); ++it) {
+                resp->add_zone(*it);
+            }
         }
         forward_datagram(resp, false);
     }
@@ -519,10 +536,13 @@ class OTPClient : public Client, public NetworkHandler
             handle_client_object_location(dgi);
             break;
         case CLIENT_ADD_INTEREST:
-            handle_client_add_interest(dgi, false);
+            handle_client_add_interest(dgi, false, false);
             break;
         case CLIENT_ADD_INTEREST_MULTIPLE:
-            handle_client_add_interest(dgi, true);
+            handle_client_add_interest(dgi, true, false);
+            break;
+        case CLIENT_ADD_INTEREST_OBJECTS:
+            handle_client_add_interest(dgi, true, true);
             break;
         case CLIENT_REMOVE_INTEREST:
             handle_client_remove_interest(dgi);
@@ -685,7 +705,7 @@ class OTPClient : public Client, public NetworkHandler
     }
 
     // handle_client_add_interest occurs is called when the client adds an interest.
-    virtual void handle_client_add_interest(DatagramIterator &dgi, bool multiple)
+    virtual void handle_client_add_interest(DatagramIterator &dgi, bool multiple, bool direct)
     {
         if(m_interests_allowed == INTERESTS_DISABLED) {
             send_disconnect(CLIENT_DISCONNECT_FORBIDDEN_INTEREST,
@@ -696,7 +716,7 @@ class OTPClient : public Client, public NetworkHandler
         uint32_t context = dgi.read_uint32();
 
         Interest i;
-        build_interest(dgi, multiple, i);
+        build_interest(dgi, multiple, direct, i);
         if(m_interests_allowed == INTERESTS_VISIBLE && !lookup_object(i.parent)) {
             stringstream ss;
             ss << "Cannot add interest to parent with id " << i.parent

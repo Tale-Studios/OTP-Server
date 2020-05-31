@@ -157,12 +157,13 @@ DCClass *Client::lookup_object(doid_t do_id)
     return nullptr;
 }
 
-// lookup_interests returns a list of all the interests that a parent-zone pair is visible to.
-vector<Interest> Client::lookup_interests(doid_t parent_id, zone_t zone_id)
+// lookup_interests returns a list of all the interests that a parent-zone or parent-doid pair is visible to.
+vector<Interest> Client::lookup_interests(doid_t parent_id, zone_t zone_id, doid_t do_id)
 {
     vector<Interest> interests;
     for(const auto& it : m_interests) {
-        if(parent_id == it.second.parent && (it.second.zones.find(zone_id) != it.second.zones.end())) {
+        if(parent_id == it.second.parent && (it.second.zones.find(zone_id) != it.second.zones.end() ||
+           it.second.doids.find(do_id) != it.second.doids.end())) {
             interests.push_back(it.second);
         }
     }
@@ -171,7 +172,7 @@ vector<Interest> Client::lookup_interests(doid_t parent_id, zone_t zone_id)
 
 // build_interest will build an interest from a datagram. It is expected that the datagram
 // iterator is positioned such that next item to be read is the interest_id.
-void Client::build_interest(DatagramIterator &dgi, bool multiple, Interest &out)
+void Client::build_interest(DatagramIterator &dgi, bool multiple, bool direct, Interest &out)
 {
     uint16_t interest_id = dgi.read_uint16();
     doid_t parent = dgi.read_doid();
@@ -187,10 +188,16 @@ void Client::build_interest(DatagramIterator &dgi, bool multiple, Interest &out)
     // TODO: We shouldn't have to do this ourselves, figure out where else we're doing
     //       something wrong.
     out.zones.rehash((unsigned int)(ceil(count / out.zones.max_load_factor())));
+    out.doids.rehash((unsigned int)(ceil(count / out.doids.max_load_factor())));
 
     for(uint16_t x{}; x < count; ++x) {
-        zone_t zone = dgi.read_zone();
-        out.zones.insert(out.zones.end(), zone);
+        if(direct) {
+            doid_t do_id = dgi.read_doid();
+            out.doids.insert(out.doids.end(), do_id);
+        } else {
+            zone_t zone = dgi.read_zone();
+            out.zones.insert(out.zones.end(), zone);
+        }
     }
 }
 
@@ -200,10 +207,17 @@ void Client::build_interest(DatagramIterator &dgi, bool multiple, Interest &out)
 void Client::add_interest(Interest &i, uint32_t context, channel_t caller)
 {
     unordered_set<zone_t> new_zones;
+    unordered_set<doid_t> new_doids;
 
     for(const auto& it : i.zones) {
-        if(lookup_interests(i.parent, it).empty()) {
+        if(lookup_interests(i.parent, it, 0).empty()) {
             new_zones.insert(it);
+        }
+    }
+
+    for(const auto& it : i.doids) {
+        if(lookup_interests(i.parent, 0, it).empty()) {
+            new_doids.insert(it);
         }
     }
 
@@ -211,31 +225,13 @@ void Client::add_interest(Interest &i, uint32_t context, channel_t caller)
         // This is an already-open interest that is actually being altered.
         // Therefore, we need to delete the objects that the client can see
         // through this interest only.
-
-        Interest previous_interest = m_interests[i.id];
-        unordered_set<zone_t> killed_zones;
-
-        for(const auto& it : previous_interest.zones) {
-            if(lookup_interests(previous_interest.parent, it).size() > 1) {
-                // An interest other than the altered one can see this parent/zone,
-                // so we don't care about it.
-                continue;
-            }
-
-            // If we've gotten here: parent,*it is unique, so if the new interest
-            // doesn't cover it, we add it to the killed zones.
-            if(i.parent != previous_interest.parent || i.zones.find(it) == i.zones.end()) {
-                killed_zones.insert(it);
-            }
-        }
-
-        // Now that we know what zones to kill, let's get to it:
-        close_zones(previous_interest.parent, killed_zones);
+        close_interest(m_interests[i.id], i, true);
     }
+
     m_interests[i.id] = i;
 
-    if(new_zones.empty()) {
-        // We aren't requesting any new zones with this operation, so don't
+    if(new_zones.empty() && new_doids.empty()) {
+        // We aren't requesting any new zones/doids with this operation, so don't
         // bother firing off a State Server request. Instead, let the caller
         // know we're already done:
         if(caller == m_channel) {
@@ -250,36 +246,97 @@ void Client::add_interest(Interest &i, uint32_t context, channel_t caller)
     uint32_t request_context = m_next_context++;
 
     InterestOperation *iop = new InterestOperation(this, m_client_agent->m_interest_timeout,
-            i.id, context, request_context, i.parent, new_zones, caller);
+            i.id, context, request_context, new_zones, new_doids, i.parent, caller);
     m_pending_interests.emplace(request_context, iop);
 
-    DatagramPtr resp = Datagram::create();
-    resp->add_server_header(i.parent, m_channel, STATESERVER_OBJECT_GET_ZONES_OBJECTS);
-    resp->add_uint32(request_context);
-    resp->add_doid(i.parent);
-    resp->add_uint16(new_zones.size());
-    for(const auto& it : new_zones) {
-        resp->add_zone(it);
-        subscribe_channel(location_as_channel(i.parent, it));
+    if(!new_doids.empty()) {
+        DatagramPtr resp = Datagram::create();
+        resp->add_server_header(i.parent, m_channel, STATESERVER_OBJECT_GET_CHILDREN);
+        resp->add_uint32(request_context);
+        resp->add_doid(i.parent);
+        resp->add_uint16(new_doids.size());
+        for(const auto& it : new_doids) {
+            resp->add_doid(it);
+            subscribe_channel(object_as_channel(i.parent, it));
+        }
+        route_datagram(resp);
+    } else {
+        DatagramPtr resp = Datagram::create();
+        resp->add_server_header(i.parent, m_channel, STATESERVER_OBJECT_GET_ZONES_OBJECTS);
+        resp->add_uint32(request_context);
+        resp->add_doid(i.parent);
+        resp->add_uint16(new_zones.size());
+        for(const auto& it : new_zones) {
+            resp->add_zone(it);
+            subscribe_channel(location_as_channel(i.parent, it));
+        }
+        route_datagram(resp);
     }
-    route_datagram(resp);
 }
 
-// remove_interest find each zone an interest which is not part of another interest and
-// passes it to close_zones() to be removed from the client's visibility.
-void Client::remove_interest(Interest &i, uint32_t context, channel_t caller)
+// close_interest finds each zone in an interest which is not part of another interest and
+// passes it to close_zones() or close_doids() to be removed from the client's visibility.
+void Client::close_interest(Interest &i, Interest &new_interest, bool alter)
 {
     unordered_set<zone_t> killed_zones;
+    unordered_set<doid_t> killed_doids;
 
     for(const auto& it : i.zones) {
-        if(lookup_interests(i.parent, it).size() == 1) {
-            // We're the only interest who can see this zone, so let's kill it.
-            killed_zones.insert(it);
+        if(alter) {
+            if(lookup_interests(i.parent, it, 0).size() > 1) {
+                // An interest other than the altered one can see this parent/zone,
+                // so we don't care about it.
+                continue;
+            }
+
+            // If we've gotten here: parent,*it is unique, so if the new interest
+            // doesn't cover it, we add it to the killed zones.
+            if(new_interest.parent != i.parent || new_interest.zones.find(it) == new_interest.zones.end()) {
+                killed_zones.insert(it);
+            }
+        } else {
+            if(lookup_interests(i.parent, it, 0).size() == 1) {
+                // We're the only interest who can see this zone, so let's kill it.
+                killed_zones.insert(it);
+            }
         }
     }
 
-    // Now that we know what zones to kill, let's get to it:
-    close_zones(i.parent, killed_zones);
+    for(const auto& it : i.doids) {
+        if(alter) {
+            if(lookup_interests(i.parent, 0, it).size() > 1) {
+                // An interest other than the altered one can see this parent/doid,
+                // so we don't care about it.
+                continue;
+            }
+
+            // If we've gotten here: parent,*it is unique, so if the new interest
+            // doesn't cover it, we add it to the killed doids.
+            if(new_interest.parent != i.parent || new_interest.doids.find(it) == new_interest.doids.end()) {
+                killed_doids.insert(it);
+            }
+        } else {
+            if(lookup_interests(i.parent, 0, it).size() == 1) {
+                // We're the only interest who can see this doid, so let's kill it.
+                killed_doids.insert(it);
+            }
+        }
+    }
+
+    if(killed_doids.size() > 0) {
+        // Now that we know what doids to kill, let's get to it:
+        close_doids(i.parent, killed_doids);
+    } else {
+        // Now that we know what zones to kill, let's get to it:
+        close_zones(i.parent, killed_zones);
+    }
+}
+
+// remove_interest closes an interest, handles interest done events,
+// and erases it from m_interests.
+void Client::remove_interest(Interest &i, uint32_t context, channel_t caller)
+{
+    close_interest(i);
 
     notify_interest_done(i.id, caller);
     handle_interest_done(i.id, context);
@@ -287,12 +344,41 @@ void Client::remove_interest(Interest &i, uint32_t context, channel_t caller)
     m_interests.erase(i.id);
 }
 
+// close_doids removes objects that are currently visible to the client.
+void Client::close_doids(doid_t parent, const unordered_set<doid_t> &killed_doids)
+{
+    // Kill off all objects that are in the matched parent/doids:
+    vector<doid_t> to_remove;
+    for(const auto& it : m_visible_objects) {
+        const VisibleObject& visible_object = it.second;
+        if(visible_object.parent != parent) {
+            // Object does not belong to the parent in question; ignore.
+            continue;
+        }
+
+        if(killed_doids.find(visible_object.id) != killed_doids.end()) {
+            handle_remove_object(visible_object.id);
+            m_seen_objects.erase(visible_object.id);
+            m_historical_objects.insert(visible_object.id);
+            to_remove.push_back(visible_object.id);
+        }
+    }
+
+    for(const auto& it : to_remove) {
+        m_visible_objects.erase(it);
+    }
+
+    // Close all of the channels:
+    for(const auto& it : killed_doids) {
+        unsubscribe_channel(object_as_channel(parent, it));
+    }
+}
+
 // cloze_zones removes objects visible through the zones from the client and unsubscribes
 // from the associated location channels for those objects.
 void Client::close_zones(doid_t parent, const unordered_set<zone_t> &killed_zones)
 {
     // Kill off all objects that are in the matched parent/zones:
-
     vector<doid_t> to_remove;
     for(const auto& it : m_visible_objects) {
         const VisibleObject& visible_object = it.second;
@@ -385,7 +471,7 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
         uint32_t context = m_next_context++;
 
         Interest i;
-        build_interest(dgi, false, i);
+        build_interest(dgi, false, false, i);
         handle_add_interest(i, context);
         add_interest(i, context, sender);
     }
@@ -394,7 +480,16 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
         uint32_t context = m_next_context++;
 
         Interest i;
-        build_interest(dgi, true, i);
+        build_interest(dgi, true, false, i);
+        handle_add_interest(i, context);
+        add_interest(i, context, sender);
+    }
+    break;
+    case CLIENTAGENT_ADD_INTEREST_OBJECTS: {
+        uint32_t context = m_next_context++;
+
+        Interest i;
+        build_interest(dgi, true, true, i);
         handle_add_interest(i, context);
         add_interest(i, context, sender);
     }
@@ -649,9 +744,10 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
             if (i++ > size) break;
             InterestOperation *interest_operation = it.second;
             if(interest_operation->m_parent == parent &&
-               interest_operation->m_zones.find(zone) != interest_operation->m_zones.end()) {
+               (interest_operation->m_zones.find(zone) != interest_operation->m_zones.end() ||
+                interest_operation->m_do_ids.find(do_id) != interest_operation->m_do_ids.end())) {
 
-                // Add the DoId to m_pending_objects.
+                // Add the doid to m_pending_objects.
                 m_pending_objects.emplace(do_id, it.first);
 
                 // Queue the generate in the IOP.
@@ -688,14 +784,14 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
         return;
     }
     break;
-    case STATESERVER_OBJECT_GET_ZONES_COUNT_RESP: {
+    case STATESERVER_OBJECT_GET_COUNT_RESP: {
         uint32_t context = dgi.read_uint32();
         // using doid_t because <max_objects_in_zones> == <max_total_objects>
         doid_t count = dgi.read_doid();
 
         auto it = m_pending_interests.find(context);
         if(it == m_pending_interests.end()) {
-            m_log->error() << "Received GET_ZONES_COUNT_RESP for unknown context "
+            m_log->error() << "Received GET_COUNT_RESP for unknown context "
                            << context << ".\n";
             return;
         }
@@ -886,13 +982,13 @@ void Client::notify_interest_done(uint16_t interest_id, channel_t caller)
 InterestOperation::InterestOperation(
     Client *client, unsigned long timeout,
     uint16_t interest_id, uint32_t client_context, uint32_t request_context,
-    doid_t parent, unordered_set<zone_t> zones, channel_t caller) :
-    m_client(client),
-    m_interest_id(interest_id),
-    m_client_context(client_context),
-    m_request_context(request_context),
-    m_parent(parent), m_zones(zones),
-    m_caller(caller), m_timeout_interval(timeout)
+    unordered_set<zone_t> zones, unordered_set<doid_t> doids,
+    doid_t parent, channel_t caller) :
+    m_client(client), m_interest_id(interest_id),
+    m_client_context(client_context), m_request_context(request_context),
+    m_zones(zones), m_do_ids(doids),
+    m_parent(parent), m_caller(caller),
+    m_timeout_interval(timeout)
 {
     m_client->generate_timeout(bind(&InterestOperation::on_timeout_generate, this,
                                std::placeholders::_1));

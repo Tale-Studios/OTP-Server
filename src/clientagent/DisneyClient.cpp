@@ -898,7 +898,7 @@ class DisneyClient : public Client, public NetworkHandler
         }
 
         Interest i;
-        build_interest(new_dgi, true, i);
+        build_interest(new_dgi, true, false, i);
         add_interest(i, context, m_channel);
     }
 

@@ -66,7 +66,7 @@ class DistributedObject : public MDParticipantInterface
     void append_other_data(DatagramPtr dg, bool client_only = false);
 
     void send_interest_entry(channel_t location, uint32_t context);
-    void send_location_entry(channel_t location);
+    void send_location_entry(std::unordered_set<channel_t> targets);
     void send_ai_entry(channel_t location);
     void send_owner_entry(channel_t location);
 
@@ -83,4 +83,6 @@ class DistributedObject : public MDParticipantInterface
     bool handle_one_update(DatagramIterator &dgi, channel_t sender);
     bool handle_one_get(DatagramPtr out, uint16_t field_id,
                         bool succeed_if_unset = false, bool is_subfield = false);
+    void handle_object_query(DatagramIterator &dgi, uint16_t msg_type,
+                             channel_t sender, bool do_id, bool multiple);
 };

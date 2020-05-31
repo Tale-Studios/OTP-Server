@@ -30,6 +30,10 @@ inline channel_t location_as_channel(doid_t parent, zone_t zone)
 {
     return (channel_t(parent) << ZONE_BITS) | channel_t(zone);
 }
+inline channel_t object_as_channel(doid_t parent, doid_t child)
+{
+    return (channel_t(parent) << ZONE_BITS) | channel_t(child);
+}
 inline channel_t parent_to_children(doid_t parent)
 {
     return PARENT_PREFIX | channel_t(parent);

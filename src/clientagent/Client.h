@@ -50,6 +50,7 @@ struct Interest {
     uint16_t id;
     doid_t parent;
     std::unordered_set<zone_t> zones;
+    std::unordered_set<doid_t> doids;
 };
 
 
@@ -65,8 +66,9 @@ class InterestOperation
     uint16_t m_interest_id;
     uint32_t m_client_context;
     uint32_t m_request_context;
-    doid_t m_parent;
     std::unordered_set<zone_t> m_zones;
+    std::unordered_set<doid_t> m_do_ids;
+    doid_t m_parent;
     channel_t m_caller;
 
     unsigned long m_timeout_interval;
@@ -80,7 +82,8 @@ class InterestOperation
 
     InterestOperation(Client *client, unsigned long timeout,
                       uint16_t interest_id, uint32_t client_context, uint32_t request_context,
-                      doid_t parent, std::unordered_set<zone_t> zones, channel_t caller);
+                      std::unordered_set<zone_t> zones, std::unordered_set<doid_t> doids,
+                      doid_t parent, channel_t caller);
     ~InterestOperation();
 
     bool is_ready();
@@ -157,23 +160,30 @@ class Client : public MDParticipantInterface
     // If that object is not visible to the client, nullptr will be returned instead.
     DCClass* lookup_object(doid_t do_id);
 
-    // lookup_interests returns a list of all the interests that a parent-zone pair is visible to.
-    std::vector<Interest> lookup_interests(doid_t parent_id, zone_t zone_id);
+    // lookup_interests returns a list of all the interests that a parent-zone or parent-doid pair is visible to.
+    std::vector<Interest> lookup_interests(doid_t parent_id, zone_t zone_id = 0, doid_t do_id = 0);
 
     // build_interest will build an interest from a datagram. It is expected that the datagram
     // iterator is positioned such that next item to be read is the interest_id.
-    void build_interest(DatagramIterator &dgi, bool multiple, Interest &out);
+    void build_interest(DatagramIterator &dgi, bool multiple, bool direct, Interest &out);
 
     // add_interest will start a new interest operation and retrieve all the objects an interest
     // from the server, subscribing to each zone in the interest.  If the interest already
-    // exists, the interest will be updated with the new zones passed in by the argument.
+    // exists, the interest will be updated with the new zones/doids passed in by the argument.
     // The caller is used to specify a server channel that should be informed when the interest
     // operation is completed; typically that is not specified by subclasses.
     void add_interest(Interest &i, uint32_t context, channel_t caller = 0);
 
-    // remove_interest find each zone an interest which is not part of another interest and
-    // passes it to close_zones() to be removed from the client's visibility.
+    // close_interest finds each zone in an interest which is not part of another interest and
+    // passes it to close_zones() or close_doids() to be removed from the client's visibility.
+    void close_interest(Interest &i, Interest &new_interest = Interest(), bool alter = false);
+
+    // remove_interest closes an interest, handles interest done events,
+    // and erases it from m_interests.
     void remove_interest(Interest &i, uint32_t context, channel_t caller = 0);
+
+    // close_doids removes objects that are currently visible to the client.
+    void close_doids(doid_t parent, const unordered_set<doid_t> &killed_doids);
 
     // cloze_zones removes objects visible through the zones from the client and unsubscribes
     // from the associated location channels for those objects.
