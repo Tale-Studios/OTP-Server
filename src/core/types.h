@@ -12,6 +12,8 @@ const channel_t CHANNEL_MAX = (channel_t)(-1);
 const doid_t DOID_MAX = (doid_t)(-1);
 const zone_t ZONE_MAX = (zone_t)(-1);
 const size_t ZONE_BITS = sizeof(zone_t) * 8;
+const doid_t INDEX_END = (doid_t) - 1;
+const doid_t INDEX_ALLOCATED = (doid_t) - 2;
 
 /* DoId constants */
 const doid_t INVALID_DO_ID = 0;

@@ -52,7 +52,7 @@ DistributedObject::DistributedObject(StateServer *stateserver, doid_t do_id, doi
 
     m_log->debug() << "Object created..." << endl;
 
-    dgi.seek_payload(); // Seek back to front of payload, to read sender
+    dgi.seek_payload(); // Seek back to front of payload, to read sender.
     handle_location_change(parent_id, zone_id, dgi.read_channel());
     wake_children();
 }
@@ -370,6 +370,8 @@ void DistributedObject::finish_delete(bool notify_parent, bool ai_deletion)
     route_datagram(dg);
 
     m_stateserver->m_objs.erase(m_do_id);
+    m_stateserver->m_dcids.erase(m_do_id);
+    m_stateserver->free_id(m_do_id);
     m_log->debug() << "Deleted.\n";
 
     terminate();
