@@ -381,7 +381,7 @@ void DistributedObject::delete_children(bool ai_deletion)
 {
     // Delete each child.
     DatagramPtr dg = Datagram::create(parent_to_children(m_do_id), m_do_id,
-                                      STATESERVER_OBJECT_DELETE_CHILDREN);
+                                      STATESERVER_OBJECT_DELETE_CHILDREN_RESP);
     dg->add_bool(ai_deletion);
     route_datagram(dg);
 }
@@ -671,6 +671,10 @@ void DistributedObject::handle_datagram(DatagramHandle, DatagramIterator &dgi)
         break;
     }
     case STATESERVER_OBJECT_DELETE_CHILDREN: {
+        delete_children();
+        break;
+    }
+    case STATESERVER_OBJECT_DELETE_CHILDREN_RESP: {
         begin_delete(dgi.read_bool());
         break;
     }
