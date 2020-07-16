@@ -80,12 +80,12 @@ void BungeeCord::handle_connection(const std::shared_ptr<uvw::TcpHandle> &socket
     if(m_connected) {
         // We're already connected...
         m_log->error() << "Got a redundant incoming connection from "
-                       << remote.ip << ":" << remote.port << "\n";
+                       << remote.ip << ":" << remote.port << std::endl;
         return;
     }
 
     m_log->info() << "Got an incoming connection from "
-                  << remote.ip << ":" << remote.port << "\n";
+                  << remote.ip << ":" << remote.port << std::endl;
 
     m_connected = true;
 
@@ -97,7 +97,7 @@ void BungeeCord::handle_error(const uvw::ErrorEvent& evt)
 {
     if(evt.code() == UV_EADDRINUSE || evt.code() == UV_EADDRNOTAVAIL) {
         // We failed to bind. Fall over and die.
-        m_log->fatal() << "Failed to bind to address: " << evt.what() << "\n";
+        m_log->fatal() << "Failed to bind to address: " << evt.what() << std::endl;
         terminate();
     }
 }
@@ -106,11 +106,11 @@ void BungeeCord::on_connect(const std::shared_ptr<uvw::TcpHandle> &socket)
 {
     if(socket == nullptr) {
         // We failed to establish a connection. Fall over and die.
-        m_log->fatal() << "Failed to establish connection\n";
+        m_log->fatal() << "Failed to establish connection" << std::endl;
         terminate();
     }
 
-    m_log->info() << "Successfully connected to server\n";
+    m_log->info() << "Successfully connected to server" << std::endl;
 
     m_connected = true;
 
@@ -125,42 +125,46 @@ void BungeeCord::on_connect(const std::shared_ptr<uvw::TcpHandle> &socket)
 void BungeeCord::on_connect_error(const uvw::ErrorEvent& evt)
 {
     // We failed to connect. Fall over and die.
-    m_log->fatal() << "Failed to connect to address: " << evt.what() << "\n";
+    m_log->fatal() << "Failed to connect to address: " << evt.what() << std::endl;
     terminate();
 }
 
 void BungeeCord::receive_datagram(DatagramHandle dg)
 {
     DatagramIterator dgi(dg);
-    dgi.seek_payload();
-    dgi.skip(sizeof(channel_t));
-    uint16_t msgtype = dgi.read_uint16();
-    switch(msgtype) {
-    case BUNGEECORD_ROUTE_MESSAGE: {
-        // Put together the datagram:
-        DatagramPtr datagram = Datagram::create(dgi.read_string());
+    try {
+        dgi.seek_payload();
+        dgi.skip(sizeof(channel_t));
+        uint16_t msgtype = dgi.read_uint16();
+        switch(msgtype) {
+        case BUNGEECORD_ROUTE_MESSAGE: {
+            // Put together the datagram:
+            DatagramPtr datagram = Datagram::create(dgi.read_string());
 
-        // Route it:
-        route_datagram(datagram);
-        break;
-    }
-    case BUNGEECORD_ROUTE_MESSAGES: {
-        vector<string> messages;
-
-        // Iterate over sent messages
-        while(dgi.get_remaining() > 0) {
-            messages.push_back(dgi.read_string());
-        }
-
-        // Route each message
-        for(auto message : messages) {
-            DatagramPtr datagram = Datagram::create(message);
+            // Route it:
             route_datagram(datagram);
+            break;
         }
-        break;
-    }
-    default:
-        m_log->warning() << "Received unknown message over the cord: msgtype=" << msgtype << std::endl;
+        case BUNGEECORD_ROUTE_MESSAGES: {
+            vector<string> messages;
+
+            // Iterate over sent messages
+            while(dgi.get_remaining() > 0) {
+                messages.push_back(dgi.read_string());
+            }
+
+            // Route each message
+            for(auto message : messages) {
+                DatagramPtr datagram = Datagram::create(message);
+                route_datagram(datagram);
+            }
+            break;
+        }
+        default:
+            m_log->warning() << "Received unknown message over the cord: msgtype=" << msgtype << std::endl;
+        }
+    } catch(const DatagramIteratorEOF &) {
+        m_log->error() << "Detected truncated datagram from BungeeCord participant." << std::endl;
     }
 }
 
@@ -168,7 +172,7 @@ void BungeeCord::receive_disconnect(const uvw::ErrorEvent& evt)
 {
     m_connected = false;
 
-    m_log->fatal() << "Lost connection to other end: " << evt.what() << "\n";
+    m_log->fatal() << "Lost connection to other end: " << evt.what() << std::endl;
 
     // If we're connecting, we just want to shut down:
     if(m_connecting) {
@@ -181,7 +185,7 @@ void BungeeCord::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
 {
     // If we aren't connected, we can't route a message to anything:
     if(!m_connected) {
-        m_log->warning() << "Received route message when not connected.\n";
+        m_log->warning() << "Received route message when not connected." << std::endl;
         return;
     }
 
