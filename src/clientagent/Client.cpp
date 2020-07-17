@@ -718,6 +718,10 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
         doid_t n_parent = dgi.read_doid();
         zone_t n_zone = dgi.read_zone();
 
+        m_log->debug() << "Received change location for object " << do_id
+                       << " changing location to parent " << n_parent
+                       << " and zone " << n_zone << ".\n";
+
         // By default, we set disable to true.
         // If disable is true, then we do not have interest in the object's new location.
         bool disable = true;
