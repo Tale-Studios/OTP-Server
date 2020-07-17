@@ -709,19 +709,32 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
     case STATESERVER_OBJECT_CHANGING_LOCATION: {
         doid_t do_id = dgi.read_doid();
         if(try_queue_pending(do_id, in_dg)) {
-            // We received a generate for this object, and the generate is sitting in a pending iop
-            // we'll just store this dg under the m_pending_datagrams queue on the iop
+            // We received a generate for this object, and the generate is sitting in a pending iop.
+            // We'll just store this dg under the m_pending_datagrams queue on the iop.
             return;
         }
+
+        // Get the new location of the object.
         doid_t n_parent = dgi.read_doid();
         zone_t n_zone = dgi.read_zone();
 
+        // By default, we set disable to true.
+        // If disable is true, then we do not have interest in the object's new location.
         bool disable = true;
+
+        // Iterate over our current interests to see if we are still
+        // interested in this object in its new location:
         for(const auto& it : m_interests) {
+            // Get the Interest reference.
             const Interest& i = it.second;
+
+            // If this interest's parent matches the object's parent,
+            // check the interest's zones to see if it matches:
             if (i.parent == n_parent) {
                 for(const auto& it2 : i.zones) {
                     if(it2 == n_zone) {
+                        // Awesome, we have interest in this zone
+                        // and will not disable this object.
                         disable = false;
                         break;
                     }
@@ -729,6 +742,7 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
             }
         }
 
+        // See if this object is a session or owned object, and if it is already visible.
         bool session = m_session_objects.find(do_id) != m_session_objects.end();
         bool visible = m_visible_objects.find(do_id) != m_visible_objects.end();
         bool owned = m_owned_objects.find(do_id) != m_owned_objects.end();
@@ -739,44 +753,57 @@ void Client::handle_datagram(DatagramHandle in_dg, DatagramIterator &dgi)
             return;
         }
 
+        // If this object is already visible, update its location.
         if(visible) {
             m_visible_objects[do_id].parent = n_parent;
             m_visible_objects[do_id].zone = n_zone;
         }
 
-        if(session) {
-            if(owned) {
-                // This is an owned session object. Therefore:
-                // - It should be 'visible' to us regardless of interest
-                // - We should keep track of its location
-                m_owned_objects[do_id].parent = n_parent;
-                m_owned_objects[do_id].zone = n_zone;
-
-                // Fire off CLIENT_OBJECT_LOCATION.
-                handle_change_location(do_id, n_parent, n_zone);
-            }
-            else {
-                // This is a session object, but it isn't owned...
-                // Session objects must always be owned.
-                stringstream ss;
-                ss << "The session object with id " << do_id
-                   << " is no longer owned.";
-                send_disconnect(CLIENT_DISCONNECT_SESSION_OBJECT_DELETED, ss.str());
-            }
-
-            return;
+        // If this object is owned, update its location in that map too.
+        if(owned) {
+            m_owned_objects[do_id].parent = n_parent;
+            m_owned_objects[do_id].zone = n_zone;
         }
 
         // Disable this object if:
-        // 1 - We don't have interest in its location (i.e. disable == true)
+        // 1 - We don't have interest in its new location (i.e. disable == true)
         // 2 - It's already visible to us in the first place
+        // 3 (optional) - If it's a session object, it isn't owned
         if(disable && visible) {
+            // If we're dealing with a session object, bypass normal
+            // handling and check if the object is owned or not:
+            if(session) {
+                if(owned) {
+                    // This is an owned session object. Therefore:
+                    // - It should be 'visible' to us regardless of interest
+                    // - We should keep track of its location
+                    // So, fire off CLIENT_OBJECT_LOCATION.
+                    handle_change_location(do_id, n_parent, n_zone);
+                }
+                else {
+                    // This is a session object, but it isn't owned...
+                    // Session objects must always be owned.
+                    stringstream ss;
+                    ss << "The session object with id " << do_id
+                       << " is no longer owned.";
+                    send_disconnect(CLIENT_DISCONNECT_SESSION_OBJECT_DELETED, ss.str());
+                }
+
+                return;
+            }
+
+            // Remove the object from our seen/visible data,
+            // let the client know of the disabled object,
+            // and add it to our historical objects set.
             handle_remove_object(do_id);
             m_seen_objects.erase(do_id);
             m_historical_objects.insert(do_id);
             m_visible_objects.erase(do_id);
         }
         else {
+            // Cool, we are interested in this object, so let's
+            // fire off CLIENT_OBJECT_LOCATION to let the client
+            // know of the object's new location.
             handle_change_location(do_id, n_parent, n_zone);
         }
     }
