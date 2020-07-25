@@ -74,7 +74,7 @@ class OTPClient : public Client, public NetworkHandler
         m_client->initialize(socket, remote, local, haproxy_mode);
     }
 
-    inline void pre_initialize()
+    inline virtual void pre_initialize()
     {
         // Set interest permissions
         string permission_level = interest_permissions.get_rval(m_config);
@@ -91,7 +91,7 @@ class OTPClient : public Client, public NetworkHandler
         m_client->set_write_buffer(write_buffer_size.get_rval(m_config));
     }
 
-    void heartbeat_timeout()
+    virtual void heartbeat_timeout()
     {
         lock_guard<recursive_mutex> lock(m_client_lock);
         // The heartbeat timer has already deleted itself at this point
