@@ -710,26 +710,26 @@ static const yytype_uint16 yyrline[] =
      140,   144,   149,   153,   156,   160,   164,   168,   172,   176,
      181,   185,   190,   199,   203,   212,   217,   222,   227,   232,
      240,   243,   244,   245,   246,   247,   248,   251,   252,   253,
-     254,   255,   256,   257,   258,   259,   260,   263,   268,   273,
-     278,   282,   286,   291,   296,   299,   304,   309,   314,   319,
-     323,   328,   333,   337,   342,   346,   350,   354,   358,   362,
-     366,   370,   374,   378,   382,   386,   390,   394,   398,   402,
-     406,   410,   414,   415,   418,   419,   420,   421,   422,   425,
-     429,   433,   437,   441,   442,   443,   444,   447,   448,   451,
-     454,   458,   462,   463,   464,   465,   466,   467,   468,   469,
-     470,   471,   474,   478,   479,   480,   481,   484,   487,   488,
-     489,   492,   493,   494,   497,   498,   501,   502,   503,   504,
-     505,   508,   511,   512,   515,   516,   517,   520,   524,   528,
-     532,   536,   540,   544,   548,   552,   556,   560,   564,   568,
-     572,   576,   580,   584,   588,   592,   596,   600,   604,   608,
-     612,   616,   620,   624,   628,   632,   636,   640,   644,   648,
-     652,   656,   660,   661,   662,   665,   666,   667,   668,   671,
-     672,   673,   674,   675,   678,   679,   680,   683,   684,   685,
-     688,   689,   692,   693,   694,   697,   698,   699,   702,   703,
-     704,   707,   708,   709,   712,   713,   714,   717,   718,   719,
-     722,   723,   724,   725,   728,   729,   730,   733,   734,   735,
-     738,   741,   744,   748,   751,   752,   755,   758,   762,   765,
-     769
+     254,   255,   256,   257,   258,   259,   260,   263,   267,   271,
+     275,   278,   281,   285,   289,   292,   296,   300,   304,   308,
+     311,   315,   319,   322,   326,   330,   334,   338,   342,   346,
+     350,   354,   358,   362,   366,   370,   374,   378,   382,   386,
+     390,   394,   398,   399,   402,   403,   404,   405,   406,   409,
+     413,   417,   421,   425,   426,   427,   428,   431,   432,   435,
+     438,   442,   446,   447,   448,   449,   450,   451,   452,   453,
+     454,   455,   458,   462,   463,   464,   465,   468,   471,   472,
+     473,   476,   477,   478,   481,   482,   485,   486,   487,   488,
+     489,   492,   495,   496,   499,   500,   501,   504,   508,   512,
+     516,   520,   524,   528,   532,   536,   540,   544,   548,   552,
+     556,   560,   564,   568,   572,   576,   580,   584,   588,   592,
+     596,   600,   604,   608,   612,   616,   620,   624,   628,   632,
+     636,   640,   644,   645,   646,   649,   650,   651,   652,   655,
+     656,   657,   658,   659,   662,   663,   664,   667,   668,   669,
+     672,   673,   676,   677,   678,   681,   682,   683,   686,   687,
+     688,   691,   692,   693,   696,   697,   698,   701,   702,   703,
+     706,   707,   708,   709,   712,   713,   714,   717,   718,   719,
+     722,   725,   728,   732,   735,   736,   739,   742,   746,   749,
+     753
 };
 #endif
 
@@ -2322,609 +2322,593 @@ yyreduce:
 /* Line 1792 of yacc.c  */
 #line 264 "dna.ypp"
     {
-  _cur_comp = _cur_comp->get_parent();
 }
     break;
 
   case 48:
 /* Line 1792 of yacc.c  */
-#line 269 "dna.ypp"
+#line 268 "dna.ypp"
     {
-  _cur_comp = _cur_comp->get_parent();
 }
     break;
 
   case 49:
 /* Line 1792 of yacc.c  */
-#line 274 "dna.ypp"
+#line 272 "dna.ypp"
     {
-  _cur_comp = _cur_comp->get_parent();
 }
     break;
 
   case 50:
 /* Line 1792 of yacc.c  */
-#line 279 "dna.ypp"
+#line 276 "dna.ypp"
     {
-  _cur_comp = _cur_comp->get_parent();
 }
     break;
 
   case 51:
 /* Line 1792 of yacc.c  */
-#line 283 "dna.ypp"
+#line 279 "dna.ypp"
     {
-  _cur_comp = _cur_comp->get_parent();
 }
     break;
 
   case 52:
 /* Line 1792 of yacc.c  */
-#line 287 "dna.ypp"
+#line 282 "dna.ypp"
     {
-  _cur_comp = _cur_comp->get_parent();
 }
     break;
 
   case 53:
 /* Line 1792 of yacc.c  */
-#line 292 "dna.ypp"
+#line 286 "dna.ypp"
     {
-  _cur_comp = _cur_comp->get_parent();
 }
     break;
 
   case 55:
 /* Line 1792 of yacc.c  */
-#line 300 "dna.ypp"
+#line 293 "dna.ypp"
     {
-  _cur_comp = _cur_comp->get_parent();
 }
     break;
 
   case 56:
 /* Line 1792 of yacc.c  */
-#line 305 "dna.ypp"
+#line 297 "dna.ypp"
     {
-  _cur_comp = _cur_comp->get_parent();
 }
     break;
 
   case 57:
 /* Line 1792 of yacc.c  */
-#line 310 "dna.ypp"
+#line 301 "dna.ypp"
     {
-  _cur_comp = _cur_comp->get_parent();
 }
     break;
 
   case 58:
 /* Line 1792 of yacc.c  */
-#line 315 "dna.ypp"
+#line 305 "dna.ypp"
     {
-  _cur_comp = _cur_comp->get_parent();
 }
     break;
 
   case 59:
 /* Line 1792 of yacc.c  */
-#line 320 "dna.ypp"
+#line 309 "dna.ypp"
     {
-  _cur_comp = _cur_comp->get_parent();
 }
     break;
 
   case 60:
 /* Line 1792 of yacc.c  */
-#line 324 "dna.ypp"
+#line 312 "dna.ypp"
     {
-  _cur_comp = _cur_comp->get_parent();
 }
     break;
 
   case 61:
 /* Line 1792 of yacc.c  */
-#line 329 "dna.ypp"
+#line 316 "dna.ypp"
     {
-  _cur_comp = _cur_comp->get_parent();
 }
     break;
 
   case 62:
 /* Line 1792 of yacc.c  */
-#line 334 "dna.ypp"
+#line 320 "dna.ypp"
     {
-  _cur_comp = _cur_comp->get_parent();
 }
     break;
 
   case 63:
 /* Line 1792 of yacc.c  */
-#line 338 "dna.ypp"
+#line 323 "dna.ypp"
     {
-  _cur_comp = _cur_comp->get_parent();
 }
     break;
 
   case 64:
 /* Line 1792 of yacc.c  */
-#line 343 "dna.ypp"
+#line 327 "dna.ypp"
     {
 }
     break;
 
   case 65:
 /* Line 1792 of yacc.c  */
-#line 347 "dna.ypp"
+#line 331 "dna.ypp"
     {
 }
     break;
 
   case 66:
 /* Line 1792 of yacc.c  */
-#line 351 "dna.ypp"
+#line 335 "dna.ypp"
     {
 }
     break;
 
   case 67:
 /* Line 1792 of yacc.c  */
-#line 355 "dna.ypp"
+#line 339 "dna.ypp"
     {
 }
     break;
 
   case 68:
 /* Line 1792 of yacc.c  */
-#line 359 "dna.ypp"
+#line 343 "dna.ypp"
     {
 }
     break;
 
   case 69:
 /* Line 1792 of yacc.c  */
-#line 363 "dna.ypp"
+#line 347 "dna.ypp"
     {
 }
     break;
 
   case 70:
 /* Line 1792 of yacc.c  */
-#line 367 "dna.ypp"
+#line 351 "dna.ypp"
     {
 }
     break;
 
   case 71:
 /* Line 1792 of yacc.c  */
-#line 371 "dna.ypp"
+#line 355 "dna.ypp"
     {
 }
     break;
 
   case 72:
 /* Line 1792 of yacc.c  */
-#line 375 "dna.ypp"
+#line 359 "dna.ypp"
     {
 }
     break;
 
   case 73:
 /* Line 1792 of yacc.c  */
-#line 379 "dna.ypp"
+#line 363 "dna.ypp"
     {
 }
     break;
 
   case 74:
 /* Line 1792 of yacc.c  */
-#line 383 "dna.ypp"
+#line 367 "dna.ypp"
     {
 }
     break;
 
   case 75:
 /* Line 1792 of yacc.c  */
-#line 387 "dna.ypp"
+#line 371 "dna.ypp"
     {
 }
     break;
 
   case 76:
 /* Line 1792 of yacc.c  */
-#line 391 "dna.ypp"
+#line 375 "dna.ypp"
     {
 }
     break;
 
   case 77:
 /* Line 1792 of yacc.c  */
-#line 395 "dna.ypp"
+#line 379 "dna.ypp"
     {
 }
     break;
 
   case 78:
 /* Line 1792 of yacc.c  */
-#line 399 "dna.ypp"
+#line 383 "dna.ypp"
     {
 }
     break;
 
   case 79:
 /* Line 1792 of yacc.c  */
-#line 403 "dna.ypp"
+#line 387 "dna.ypp"
     {
 }
     break;
 
   case 80:
 /* Line 1792 of yacc.c  */
-#line 407 "dna.ypp"
+#line 391 "dna.ypp"
     {
 }
     break;
 
   case 81:
 /* Line 1792 of yacc.c  */
-#line 411 "dna.ypp"
+#line 395 "dna.ypp"
     {
 }
     break;
 
   case 89:
 /* Line 1792 of yacc.c  */
-#line 426 "dna.ypp"
+#line 410 "dna.ypp"
     {
 }
     break;
 
   case 90:
 /* Line 1792 of yacc.c  */
-#line 430 "dna.ypp"
+#line 414 "dna.ypp"
     {
 }
     break;
 
   case 91:
 /* Line 1792 of yacc.c  */
-#line 434 "dna.ypp"
+#line 418 "dna.ypp"
     {
 }
     break;
 
   case 92:
 /* Line 1792 of yacc.c  */
-#line 438 "dna.ypp"
+#line 422 "dna.ypp"
     {
 }
     break;
 
   case 100:
 /* Line 1792 of yacc.c  */
-#line 455 "dna.ypp"
+#line 439 "dna.ypp"
     {
 }
     break;
 
   case 101:
 /* Line 1792 of yacc.c  */
-#line 459 "dna.ypp"
+#line 443 "dna.ypp"
     {
 }
     break;
 
   case 112:
 /* Line 1792 of yacc.c  */
-#line 475 "dna.ypp"
+#line 459 "dna.ypp"
     {
 }
     break;
 
   case 137:
 /* Line 1792 of yacc.c  */
-#line 521 "dna.ypp"
+#line 505 "dna.ypp"
     {
 }
     break;
 
   case 138:
 /* Line 1792 of yacc.c  */
-#line 525 "dna.ypp"
+#line 509 "dna.ypp"
     {
 }
     break;
 
   case 139:
 /* Line 1792 of yacc.c  */
-#line 529 "dna.ypp"
+#line 513 "dna.ypp"
     {
 }
     break;
 
   case 140:
 /* Line 1792 of yacc.c  */
-#line 533 "dna.ypp"
+#line 517 "dna.ypp"
     {
 }
     break;
 
   case 141:
 /* Line 1792 of yacc.c  */
-#line 537 "dna.ypp"
+#line 521 "dna.ypp"
     {
 }
     break;
 
   case 142:
 /* Line 1792 of yacc.c  */
-#line 541 "dna.ypp"
+#line 525 "dna.ypp"
     {
 }
     break;
 
   case 143:
 /* Line 1792 of yacc.c  */
-#line 545 "dna.ypp"
+#line 529 "dna.ypp"
     {
 }
     break;
 
   case 144:
 /* Line 1792 of yacc.c  */
-#line 549 "dna.ypp"
+#line 533 "dna.ypp"
     {
 }
     break;
 
   case 145:
 /* Line 1792 of yacc.c  */
-#line 553 "dna.ypp"
+#line 537 "dna.ypp"
     {
 }
     break;
 
   case 146:
 /* Line 1792 of yacc.c  */
-#line 557 "dna.ypp"
+#line 541 "dna.ypp"
     {
 }
     break;
 
   case 147:
 /* Line 1792 of yacc.c  */
-#line 561 "dna.ypp"
+#line 545 "dna.ypp"
     {
 }
     break;
 
   case 148:
 /* Line 1792 of yacc.c  */
-#line 565 "dna.ypp"
+#line 549 "dna.ypp"
     {
 }
     break;
 
   case 149:
 /* Line 1792 of yacc.c  */
-#line 569 "dna.ypp"
+#line 553 "dna.ypp"
     {
 }
     break;
 
   case 150:
 /* Line 1792 of yacc.c  */
-#line 573 "dna.ypp"
+#line 557 "dna.ypp"
     {
 }
     break;
 
   case 151:
 /* Line 1792 of yacc.c  */
-#line 577 "dna.ypp"
+#line 561 "dna.ypp"
     {
 }
     break;
 
   case 152:
 /* Line 1792 of yacc.c  */
-#line 581 "dna.ypp"
+#line 565 "dna.ypp"
     {
 }
     break;
 
   case 153:
 /* Line 1792 of yacc.c  */
-#line 585 "dna.ypp"
+#line 569 "dna.ypp"
     {
 }
     break;
 
   case 154:
 /* Line 1792 of yacc.c  */
-#line 589 "dna.ypp"
+#line 573 "dna.ypp"
     {
 }
     break;
 
   case 155:
 /* Line 1792 of yacc.c  */
-#line 593 "dna.ypp"
+#line 577 "dna.ypp"
     {
 }
     break;
 
   case 156:
 /* Line 1792 of yacc.c  */
-#line 597 "dna.ypp"
+#line 581 "dna.ypp"
     {
 }
     break;
 
   case 157:
 /* Line 1792 of yacc.c  */
-#line 601 "dna.ypp"
+#line 585 "dna.ypp"
     {
 }
     break;
 
   case 158:
 /* Line 1792 of yacc.c  */
-#line 605 "dna.ypp"
+#line 589 "dna.ypp"
     {
 }
     break;
 
   case 159:
 /* Line 1792 of yacc.c  */
-#line 609 "dna.ypp"
+#line 593 "dna.ypp"
     {
 }
     break;
 
   case 160:
 /* Line 1792 of yacc.c  */
-#line 613 "dna.ypp"
+#line 597 "dna.ypp"
     {
 }
     break;
 
   case 161:
 /* Line 1792 of yacc.c  */
-#line 617 "dna.ypp"
+#line 601 "dna.ypp"
     {
 }
     break;
 
   case 162:
 /* Line 1792 of yacc.c  */
-#line 621 "dna.ypp"
+#line 605 "dna.ypp"
     {
 }
     break;
 
   case 163:
 /* Line 1792 of yacc.c  */
-#line 625 "dna.ypp"
+#line 609 "dna.ypp"
     {
 }
     break;
 
   case 164:
 /* Line 1792 of yacc.c  */
-#line 629 "dna.ypp"
+#line 613 "dna.ypp"
     {
 }
     break;
 
   case 165:
 /* Line 1792 of yacc.c  */
-#line 633 "dna.ypp"
+#line 617 "dna.ypp"
     {
 }
     break;
 
   case 166:
 /* Line 1792 of yacc.c  */
-#line 637 "dna.ypp"
+#line 621 "dna.ypp"
     {
 }
     break;
 
   case 167:
 /* Line 1792 of yacc.c  */
-#line 641 "dna.ypp"
+#line 625 "dna.ypp"
     {
 }
     break;
 
   case 168:
 /* Line 1792 of yacc.c  */
-#line 645 "dna.ypp"
+#line 629 "dna.ypp"
     {
 }
     break;
 
   case 169:
 /* Line 1792 of yacc.c  */
-#line 649 "dna.ypp"
+#line 633 "dna.ypp"
     {
 }
     break;
 
   case 170:
 /* Line 1792 of yacc.c  */
-#line 653 "dna.ypp"
+#line 637 "dna.ypp"
     {
 }
     break;
 
   case 171:
 /* Line 1792 of yacc.c  */
-#line 657 "dna.ypp"
+#line 641 "dna.ypp"
     {
 }
     break;
 
   case 220:
 /* Line 1792 of yacc.c  */
-#line 739 "dna.ypp"
+#line 723 "dna.ypp"
     {
 }
     break;
 
   case 221:
 /* Line 1792 of yacc.c  */
-#line 742 "dna.ypp"
+#line 726 "dna.ypp"
     {
 }
     break;
 
   case 222:
 /* Line 1792 of yacc.c  */
-#line 745 "dna.ypp"
+#line 729 "dna.ypp"
     {
 }
     break;
 
   case 226:
 /* Line 1792 of yacc.c  */
-#line 756 "dna.ypp"
+#line 740 "dna.ypp"
     {
 }
     break;
 
   case 227:
 /* Line 1792 of yacc.c  */
-#line 759 "dna.ypp"
+#line 743 "dna.ypp"
     {
 }
     break;
 
   case 228:
 /* Line 1792 of yacc.c  */
-#line 763 "dna.ypp"
+#line 747 "dna.ypp"
     {
 }
     break;
 
   case 229:
 /* Line 1792 of yacc.c  */
-#line 766 "dna.ypp"
+#line 750 "dna.ypp"
     {
 }
     break;
 
   case 230:
 /* Line 1792 of yacc.c  */
-#line 770 "dna.ypp"
+#line 754 "dna.ypp"
     {
 }
     break;
 
 
 /* Line 1792 of yacc.c  */
-#line 2928 "dna_ypp.cpp"
+#line 2912 "dna_ypp.cpp"
       default: break;
     }
   /* User semantic actions sometimes alter yychar, and that requires

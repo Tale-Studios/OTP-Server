@@ -10,6 +10,8 @@
 #include "dclass/dcPacker.h"
 #include "dclass/dcClass.h"
 #include "dclass/dcField.h"
+#include "dna/DNALoader.h"
+#include "dna/DNAStorage.h"
 #include "util/Timeout.h"
 
 using namespace std;
@@ -20,6 +22,7 @@ static ConfigVariable<string> game_name_config("game_name", "otp", disneyclient_
 static ConfigVariable<uint32_t> database_id_config("database_id", 4003, disneyclient_config);
 static ConfigVariable<string> database_file_config("database_file", "account-bridge.json", disneyclient_config);
 static ConfigVariable<string> name_file_config("name_file", "NameMasterEnglish.txt", disneyclient_config);
+static ConfigVariable<vector<string> > dna_files_config("dna_files", vector<string>(), disneyclient_config);
 static ConfigVariable<bool> send_hash_to_client("send_hash", true, disneyclient_config);
 static ConfigVariable<bool> send_version_to_client("send_version", true, disneyclient_config);
 
@@ -34,6 +37,10 @@ static ConfigVariable<long> heartbeat_timeout_config("heartbeat_timeout", 0, dis
 static OTPClientManager* g_cm;
 static ToontownClientManager* g_ttcm;
 
+// Same with our DNA classes:
+static DNALoader* g_dna_loader;
+static DNAStorage* g_dna_store;
+
 class DisneyClient : public Client, public NetworkHandler
 {
   private:
@@ -43,6 +50,7 @@ class DisneyClient : public Client, public NetworkHandler
     string m_game_name;
     string m_name_file;
     string m_database_file;
+    vector<string> m_dna_files;
     uint32_t m_database_id;
     bool m_clean_disconnect;
     bool m_relocate_owned;
@@ -58,6 +66,7 @@ class DisneyClient : public Client, public NetworkHandler
                  const uvw::Addr &remote, const uvw::Addr &local, const bool haproxy_mode) :
         Client(config, client_agent), m_client(std::make_shared<NetworkClient>(this)),
         m_config(config), m_game_name(game_name_config.get_rval(config)),
+        m_dna_files(dna_files_config.get_rval(config)),
         m_name_file(name_file_config.get_rval(config)),
         m_database_file(database_file_config.get_rval(config)),
         m_database_id(database_id_config.get_rval(config)), m_clean_disconnect(false),
@@ -155,14 +164,44 @@ class DisneyClient : public Client, public NetworkHandler
         route_datagram(dg);
     }
 
-    inline void pre_initialize()
+    virtual void load_DNA_files()
+    {
+        // Only load our DNA files if we haven't already:
+        if(g_dna_loader == nullptr || g_dna_store == nullptr) {
+            // Instantiate the DNA classes we need to use.
+            g_dna_loader = new DNALoader();
+            g_dna_store = new DNAStorage();
+
+            // Load each DNA file from the config.
+            for(auto it = m_dna_files.begin(); it != m_dna_files.end(); ++it) {
+                // Log the DNA file.
+                m_client_agent->log()->info() << "Loading DNA file: " << *it << endl;
+
+                // Open up the file.
+                ifstream dna_file(*it);
+                istream& dna_stream = dna_file;
+                if(dna_file.good()) {
+                    // Load it.
+                    g_dna_loader->load_DNA_file_AI(g_dna_store, &dna_stream, *it);
+                } else {
+                    // Uh oh: this file does not exist or is corrupt.
+                    m_client_agent->log()->warning() << "DNA file doesn't exist or is corrupt!" << endl;
+                }
+            }
+        }
+    }
+
+    inline virtual void pre_initialize()
     {
         // Set NetworkClient configuration.
         m_client->set_write_timeout(write_timeout_ms.get_rval(m_config));
         m_client->set_write_buffer(write_buffer_size.get_rval(m_config));
+
+        // Load our DNA files.
+        load_DNA_files();
     }
 
-    void heartbeat_timeout()
+    virtual void heartbeat_timeout()
     {
         lock_guard<recursive_mutex> lock(m_client_lock);
         // The heartbeat timer has already deleted itself at this point

@@ -262,35 +262,28 @@ dnanode : prop
 
 dnanode_grp : dnanodedef '[' subdnanode_list ']'
 {
-  _cur_comp = _cur_comp->get_parent();
 }
 
 sign : signdef '[' subprop_list ']'
 {
-  _cur_comp = _cur_comp->get_parent();
 }
 
 signgraphic : signgraphicdef '[' subsigngraphic_list ']'
 {
-  _cur_comp = _cur_comp->get_parent();
 }
 
 prop : propdef '[' subprop_list ']'
 {
-  _cur_comp = _cur_comp->get_parent();
 }
      | animpropdef '[' subanimprop_list ']'
 {
-  _cur_comp = _cur_comp->get_parent();
 }
      | interactivepropdef '[' subinteractiveprop_list ']'
 {
-  _cur_comp = _cur_comp->get_parent();
 }
 
 signbaseline : baselinedef '[' subbaseline_list ']'
 {
-  _cur_comp = _cur_comp->get_parent();
 }
 
 signtext : textdef '[' subtext_list ']'
@@ -298,45 +291,36 @@ signtext : textdef '[' subtext_list ']'
 
 flatbuilding : flatbuildingdef '[' subflatbuilding_list ']'
 {
-  _cur_comp = _cur_comp->get_parent();
 }
 
 wall : walldef '[' subwall_list ']'
 {
-  _cur_comp = _cur_comp->get_parent();
 }
 
 windows : windowsdef '[' subwindows_list ']'
 {
-  _cur_comp = _cur_comp->get_parent();
 }
 
 cornice : cornicedef '[' subcornice_list ']'
 {
-  _cur_comp = _cur_comp->get_parent();
 }
 
 landmarkbuilding : landmarkbuildingdef '[' sublandmarkbuilding_list ']'
 {
-  _cur_comp = _cur_comp->get_parent();
 }
                  | animbuildingdef '[' subanimbuilding_list ']'
 {
-  _cur_comp = _cur_comp->get_parent();
 }
 
 street : streetdef '[' substreet_list ']'
 {
-  _cur_comp = _cur_comp->get_parent();
 }
 
 door : doordef '[' subdoor_list ']'
 {
-  _cur_comp = _cur_comp->get_parent();
 }
      | flatdoordef '[' subdoor_list ']'
 {
-  _cur_comp = _cur_comp->get_parent();
 }
 
 propdef : PROP string
