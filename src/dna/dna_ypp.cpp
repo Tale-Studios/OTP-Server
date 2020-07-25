@@ -193,7 +193,7 @@ extern int dnayydebug;
      INDENT = 288,
      WIGGLE = 289,
      KERN = 290,
-     TEXT = 291,
+     DNATEXT = 291,
      LETTERS = 292,
      STORE_FONT = 293,
      FLAT_BUILDING = 294,
@@ -256,7 +256,7 @@ extern int dnayydebug;
 #define INDENT 288
 #define WIGGLE 289
 #define KERN 290
-#define TEXT 291
+#define DNATEXT 291
 #define LETTERS 292
 #define STORE_FONT 293
 #define FLAT_BUILDING 294
@@ -745,7 +745,7 @@ static const char *const yytname[] =
   "DNA_COGHQ_OUT_POINT", "SUIT_EDGE", "BATTLE_CELL", "PROP", "POS", "HPR",
   "SCALE", "CODE", "COLOR", "MODEL", "STORE_NODE", "SIGN", "BASELINE",
   "WIDTH", "HEIGHT", "STOMP", "STUMBLE", "INDENT", "WIGGLE", "KERN",
-  "TEXT", "LETTERS", "STORE_FONT", "FLAT_BUILDING", "WALL", "WINDOWS",
+  "DNATEXT", "LETTERS", "STORE_FONT", "FLAT_BUILDING", "WALL", "WINDOWS",
   "COUNT", "CORNICE", "LANDMARK_BUILDING", "TITLE", "ARTICLE",
   "BUILDING_TYPE", "DOOR", "STORE_TEXTURE", "STREET", "TEXTURE", "GRAPHIC",
   "HOODMODEL", "PLACEMODEL", "FLAGS", "NODE", "FLAT_DOOR", "ANIM",

@@ -1044,7 +1044,7 @@ input_chars(char *buffer, int &result, int max_size) {
   nassertv(input_p != nullptr);
   if (*input_p) {
     input_p->read(buffer, max_size);
-    result = input_p->gcount();
+    result = (int)input_p->gcount();
     if (result >= 0 && result < max_size) {
       // Truncate at the end of the read.
       buffer[result] = '\0';
@@ -1805,7 +1805,7 @@ YY_RULE_SETUP
 #line 507 "dna.lpp"
 {
   accept();
-  return TEXT;
+  return DNATEXT;
 }
 	YY_BREAK
 case 34:

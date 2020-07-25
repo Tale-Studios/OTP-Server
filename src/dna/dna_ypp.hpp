@@ -79,7 +79,7 @@ extern int dnayydebug;
      INDENT = 288,
      WIGGLE = 289,
      KERN = 290,
-     TEXT = 291,
+     DNATEXT = 291,
      LETTERS = 292,
      STORE_FONT = 293,
      FLAT_BUILDING = 294,
@@ -142,7 +142,7 @@ extern int dnayydebug;
 #define INDENT 288
 #define WIGGLE 289
 #define KERN 290
-#define TEXT 291
+#define DNATEXT 291
 #define LETTERS 292
 #define STORE_FONT 293
 #define FLAT_BUILDING 294

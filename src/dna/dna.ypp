@@ -84,7 +84,7 @@ void dna_cleanup_parser() {
 %token INDENT
 %token WIGGLE
 %token KERN
-%token TEXT
+%token DNATEXT
 %token LETTERS
 %token STORE_FONT
 %token FLAT_BUILDING
@@ -399,7 +399,7 @@ baselinedef : BASELINE
 {
 }
 
-textdef : TEXT
+textdef : DNATEXT
 {
 }
 
