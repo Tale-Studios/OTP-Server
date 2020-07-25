@@ -881,22 +881,6 @@ class DisneyClient : public Client, public NetworkHandler
         // Get the new DatagramIterator.
         DatagramIterator new_dgi = DatagramIterator(dg);
 
-        // If we're Toontown, then we actually want to reroute interest requests
-        // to the server so it can take into account viszones.
-        if(m_game_name == "toon" && parent_id != 4618 && zones.size() == 1) {
-            if(*(zones.begin()) >= 1000) {
-                DatagramPtr datagram = Datagram::create(4630, m_channel, CLIENT_AGENT_SET_INTEREST);
-                datagram->add_uint16(handle);
-                datagram->add_doid(parent_id);
-                datagram->add_uint16(zones.size());
-                for(auto zone : zones) {
-                    datagram->add_zone(zone);
-                }
-                route_datagram(datagram);
-                return;
-            }
-        }
-
         Interest i;
         build_interest(new_dgi, true, i);
         add_interest(i, context, m_channel);

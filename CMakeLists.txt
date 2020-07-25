@@ -222,6 +222,16 @@ if(BUILD_CLIENTAGENT)
     if(BUILD_DISNEYCLIENT)
         set(CLIENTAGENT_FILES
             src/json/json.hpp
+            src/dna/DNALoader.h
+            src/dna/DNALoader.cpp
+            src/dna/DNAStorage.h
+            src/dna/DNAStorage.cpp
+            src/dna/DNAGroup.h
+            src/dna/DNAGroup.cpp
+            src/dna/DNAVisGroup.h
+            src/dna/DNAVisGroup.cpp
+            src/dna/dna_ypp.cpp
+            src/dna/dna_lpp.cpp
             src/clientagent/Client.h
             src/clientagent/Client.cpp
             src/clientagent/ClientAgent.h
