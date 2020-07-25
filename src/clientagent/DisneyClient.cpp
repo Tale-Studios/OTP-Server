@@ -12,6 +12,7 @@
 #include "dclass/dcField.h"
 #include "dna/DNALoader.h"
 #include "dna/DNAStorage.h"
+#include "dna/DNAVisGroup.h"
 #include "util/Timeout.h"
 
 using namespace std;
@@ -56,6 +57,7 @@ class DisneyClient : public Client, public NetworkHandler
     bool m_relocate_owned;
     bool m_send_hash;
     bool m_send_version;
+    doid_t m_av_id;
 
     // Heartbeat:
     long m_heartbeat_timeout;
@@ -72,7 +74,8 @@ class DisneyClient : public Client, public NetworkHandler
         m_database_id(database_id_config.get_rval(config)), m_clean_disconnect(false),
         m_send_hash(send_hash_to_client.get_rval(config)),
         m_send_version(send_version_to_client.get_rval(config)),
-        m_heartbeat_timeout(heartbeat_timeout_config.get_rval(config))
+        m_heartbeat_timeout(heartbeat_timeout_config.get_rval(config)),
+        m_av_id(0)
     {
         pre_initialize();
 
@@ -658,10 +661,15 @@ class DisneyClient : public Client, public NetworkHandler
         case CLIENT_OBJECT_LOCATION:
             handle_client_object_location(dgi);
             break;
-        case CLIENT_SET_AVATAR:
+        case CLIENT_SET_AVATAR: {
+            doid_t av_id = dgi.read_uint32();
+
             g_cm->request_play_avatar(*this, get_account_id(),
-                                      dgi.read_uint32(), get_avatar_id());
-            break;
+                                      av_id, get_avatar_id());
+
+            m_av_id = av_id;
+        }
+        break;
         case CLIENT_REMOVE_FRIEND: {
             DatagramPtr dg = Datagram::create(4501, m_channel, DBSERVER_SET_STORED_VALUES);
             dg->add_data(dgi.read_remainder());
@@ -908,6 +916,108 @@ class DisneyClient : public Client, public NetworkHandler
             zones.insert(dgi.read_zone());
         }
 
+        // If we're Toontown, we need to make sure all VisGroups
+        // are included in this interest, if applicable.
+        if(m_game_name == "toon" && zones.size() == 1 && m_av_id > 0) {
+            zone_t zone_id = *next(zones.begin(), 0);
+
+            // Determine if this zone is within the Cog HQ range or not.
+            bool is_cog_hq_zone = zone_id >= 10000 && zone_id < 15000;
+
+            // Calculate the VisGroup branch ID.
+            zone_t branch_id = zone_id - zone_id % 100;
+            if(!is_cog_hq_zone) {
+                if(zone_id % 1000 >= 500) {
+                    branch_id -= 500;
+                }
+            }
+
+            // Calculate the zone suffix.
+            zone_t suffix = zone_id % 1000;
+            bool safe_zone = false;
+            if(suffix >= 500) {
+                suffix -= 500;
+            }
+            if(!is_cog_hq_zone && suffix < 100) {
+                safe_zone = true;
+            }
+
+            if(branch_id > 0 && ((zone_id != branch_id || zone_id >= 10000 && zone_id != 11200) && !safe_zone)) {
+                map<zone_t, vector<zone_t> > zone_vis_map;
+                for(size_t i = 0; i < g_dna_store->get_num_DNA_vis_groups_AI(); ++i) {
+                    string group_full_name = g_dna_store->get_DNA_vis_group_name(i);
+                    DNAVisGroup* vis_group = g_dna_store->get_DNA_vis_group_AI(i);
+
+                    // Set up a stream for splitting the vis group's full name.
+                    vector<string> result;
+                    stringstream ss(group_full_name);
+                    string tok;
+                    size_t splits = 0;
+
+                    // Keep splitting by the colon delimiter until we hit
+                    // our maximum split (just one).
+                    while(std::getline(ss, tok, ':')) {
+                        if(splits > 1) {
+                            break;
+                        }
+
+                        result.push_back(tok);
+                        ++splits;
+                    }
+
+                    // Now, get the first element in our vector, and
+                    // turn it into a VisZone ID.
+                    string string_zone = result.front();
+                    zone_t vis_zone_id = (zone_t)stoi(string_zone);
+
+                    // Calculate the true zone ID.
+                    vis_zone_id = get_true_zone_id(vis_zone_id, branch_id);
+
+                    // Put each visible zone in a new vector.
+                    vector<zone_t> visibles;
+                    for(size_t i = 0; i < vis_group->get_num_visibles(); ++i) {
+                        visibles.push_back(stoi(vis_group->get_visible_name(i)));
+                    }
+
+                    // Calculate the branch zone.
+                    zone_t branch_zone = vis_zone_id - vis_zone_id % 100;
+                    if(!(vis_zone_id >= 10000 && vis_zone_id < 15000)) {
+                        if(vis_zone_id % 1000 >= 500) {
+                            branch_zone -= 500;
+                        }
+                    }
+
+                    // Add the branch zone to the visibles vector as well.
+                    visibles.push_back(branch_zone);
+
+                    // Finally, add the visibles to the map we created.
+                    zone_vis_map[vis_zone_id] = visibles;
+
+                    cout << "group full name: " << group_full_name << "\n";
+                    cout << "vis zone id: " << vis_zone_id << "\n";
+                }
+
+                // Toss each recorded zone into the set.
+                for(auto it : zone_vis_map) {
+                    zones.insert(it.first);
+                    for(auto zone : it.second) {
+                        zones.insert(zone);
+                    }
+                }
+
+                cout << "new zone: " << zone_id << "\n";
+
+                // Move the current avatar's location.
+                DatagramPtr dg = Datagram::create(m_av_id, 0, STATESERVER_OBJECT_SET_LOCATION);
+                dg->add_doid(parent_id);
+                dg->add_zone(zone_id);
+                route_datagram(dg);
+
+                // Finally, include the branch ID as well.
+                zones.insert(branch_id);
+            }
+        }
+
         // Compile a new Datagram with the newer interest packet format.
         DatagramPtr dg = Datagram::create();
         dg->add_uint16(handle);
@@ -939,6 +1049,41 @@ class DisneyClient : public Client, public NetworkHandler
 
         Interest &i = m_interests[id];
         remove_interest(i, context);
+    }
+
+    virtual zone_t get_canonical_zone_id(zone_t zone_id)
+    {
+        if(zone_id == 0) {
+            zone_id = 2000;
+        } else if(zone_id >= 22000 && zone_id < 61000) {
+            zone_id = zone_id % 2000;
+            if(zone_id < 1000) {
+                zone_id = zone_id + 2000;
+            } else {
+                zone_id = zone_id - 1000 + 8000;
+            }
+        }
+
+        return zone_id;
+    }
+
+    virtual zone_t get_true_zone_id(zone_t zone_id, zone_t current_zone_id)
+    {
+        if(zone_id >= 22000 && zone_id < 61000 || zone_id == 0) {
+            zone_id = get_canonical_zone_id(zone_id);
+        }
+
+        if(current_zone_id >= 22000 && current_zone_id < 61000) {
+            zone_t hood_id = zone_id - zone_id % 1000;
+            zone_t offset = current_zone_id - current_zone_id % 2000;
+            if(hood_id == 2000) {
+                return zone_id - 2000 + offset;
+            } else if(hood_id == 8000) {
+                return zone_id - 8000 + offset + 1000;
+            }
+        }
+
+        return zone_id;
     }
 
     virtual const std::string get_remote_address()

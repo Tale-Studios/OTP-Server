@@ -1357,7 +1357,7 @@ void UnloadAvatarOperation::unload_avatar()
 
     // Reset the session object.
     DatagramPtr sdg = Datagram::create();
-    sdg->add_server_header(channel, m_client.get_client_channel(), CLIENTAGENT_ADD_SESSION_OBJECT);
+    sdg->add_server_header(channel, m_client.get_client_channel(), CLIENTAGENT_REMOVE_SESSION_OBJECT);
     sdg->add_uint32(m_av_id);
     m_client.dispatch_datagram(sdg);
 
