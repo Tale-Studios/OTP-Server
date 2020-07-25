@@ -969,6 +969,9 @@ class DisneyClient : public Client, public NetworkHandler
                     // turn it into a VisZone ID.
                     string string_zone = result.front();
                     zone_t vis_zone_id = (zone_t)stoi(string_zone);
+                    if(vis_zone_id != zone_id) {
+                        continue;
+                    }
 
                     // Calculate the true zone ID.
                     vis_zone_id = get_true_zone_id(vis_zone_id, branch_id);
@@ -992,9 +995,6 @@ class DisneyClient : public Client, public NetworkHandler
 
                     // Finally, add the visibles to the map we created.
                     zone_vis_map[vis_zone_id] = visibles;
-
-                    cout << "group full name: " << group_full_name << "\n";
-                    cout << "vis zone id: " << vis_zone_id << "\n";
                 }
 
                 // Toss each recorded zone into the set.
@@ -1004,8 +1004,6 @@ class DisneyClient : public Client, public NetworkHandler
                         zones.insert(zone);
                     }
                 }
-
-                cout << "new zone: " << zone_id << "\n";
 
                 // Move the current avatar's location.
                 DatagramPtr dg = Datagram::create(m_av_id, 0, STATESERVER_OBJECT_SET_LOCATION);
