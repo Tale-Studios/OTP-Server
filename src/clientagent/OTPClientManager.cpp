@@ -19,94 +19,59 @@ Operator::~Operator()
 {
 }
 
-void Operator::pack_json_object(DCPacker &packer, string field_name, json &object, size_t parameters, bool is_field)
+void Operator::pack_json_object(DCPacker &packer, json &object)
 {
     // Get the current pack type.
     DCPackType pack_type = packer.get_pack_type();
 
-    // Slight hack: A few fields (Account ones, in particular) aren't atomic.
-    // This means PT_field won't come up first, which screws everything up.
-    // We can detect this by checking if pack_type != PT_field and
-    // seeing if stoi() fails on field_name (this could be checked better).
-    json value;
-    if(pack_type != PT_field) {
-        if(!is_field || pack_type != PT_array) {
-            try {
-                stoi(field_name);
-                value = object[stoi(field_name)];
-            } catch(invalid_argument) {
-                value = object[field_name];
-            }
-        }
-    }
+    // Determine if the object is valid or not.
+    bool valid = object.type() != nlohmann::detail::value_t::null;
+    if(valid) {
+        // Pack based on the expected pack type.
+        switch(pack_type)
+        {
+            case PT_double:
+                packer.pack_double(object);
+                break;
+            case PT_int64:
+                packer.pack_int64(object);
+                break;
+            case PT_uint64:
+                packer.pack_uint64(object);
+                break;
+            case PT_int:
+                packer.pack_int(object);
+                break;
+            case PT_uint:
+                packer.pack_uint(object);
+                break;
+            case PT_string:
+            case PT_blob:
+                packer.pack_string(object);
+                break;
+            case PT_array: {
+                packer.push();
 
-    // Pack based on the expected pack type.
-    switch(pack_type)
-    {
-        case PT_double:
-            if(value.type() != nlohmann::detail::value_t::null) {
-                packer.pack_double(value);
-            }
-            break;
-        case PT_int64:
-            if(value.type() != nlohmann::detail::value_t::null) {
-                packer.pack_int64(value);
-            }
-            break;
-        case PT_uint64:
-            if(value.type() != nlohmann::detail::value_t::null) {
-                packer.pack_uint64(value);
-            }
-            break;
-        case PT_int:
-            if(value.type() != nlohmann::detail::value_t::null) {
-                packer.pack_int(value);
-            }
-            break;
-        case PT_uint:
-            if(value.type() != nlohmann::detail::value_t::null) {
-                packer.pack_uint(value);
-            }
-            break;
-        case PT_string:
-        case PT_blob:
-            if(value.type() != nlohmann::detail::value_t::null) {
-                packer.pack_string(value);
-            }
-            break;
-        case PT_array: {
-            packer.push();
-
-            if(is_field) {
                 for(size_t i = 0; i < object.size(); ++i) {
-                    pack_json_object(packer, to_string(i), object);
+                    pack_json_object(packer, object.at(i));
                 }
-            } else {
-                for(size_t i = 0; i < value.size(); ++i) {
-                    pack_json_object(packer, to_string(i), value);
-                }
+
+                packer.pop();
             }
-
-            packer.pop();
-        }
-        break;
-        case PT_field: {
-            packer.push();
-
-            size_t s = object[field_name].size();
-            if(parameters != -1) {
-                s = parameters;
-            }
-
-            for(size_t i = 0; i < s; ++i) {
-                pack_json_object(packer, to_string(i), object[field_name], 0, true);
-            }
-
-            packer.pop();
-        }
-        break;
-        default:
             break;
+            case PT_field: {
+                packer.push();
+
+                for(size_t i = 0; i < object.size(); ++i) {
+                    pack_json_object(packer, object.at(i));
+                }
+
+                packer.pop();
+            }
+            break;
+            default:
+                break;
+        }
     }
 }
 
@@ -153,14 +118,13 @@ void Operator::pack_json_objects(DCPacker &packer, DCClass *dclass, json &object
             continue;
         }
 
-        size_t parameters = -1;
-
+        // If this is an atomic field, pack the object by its field name.
+        // Otherwise, just toss it in.
         if(field->as_atomic_field() != nullptr) {
-            parameters = field->as_atomic_field()->get_num_elements();
+            pack_json_object(packer, object[it.key()]);
+        } else {
+            pack_json_object(packer, object);
         }
-
-        // Pack the object.
-        pack_json_object(packer, it.key(), object, parameters);
 
         // Stop packing the field.
         packer.end_pack();
@@ -170,24 +134,17 @@ void Operator::pack_json_objects(DCPacker &packer, DCClass *dclass, json &object
     }
 }
 
-void Operator::unpack_json_object(DCPacker &unpacker, string field_name, json &object)
+void Operator::unpack_json_object(DCPacker &unpacker, string field_name,
+                                  string index, json &object)
 {
     // Get the current pack type.
     DCPackType pack_type = unpacker.get_pack_type();
 
-    // Slight hack: A few fields (Account ones, in particular) aren't atomic.
-    // This means PT_field won't come up first, which screws everything up.
-    // We can detect this by checking if pack_type != PT_field and
-    // seeing if stoi() fails on field_name (this could be checked better).
     bool atomic = true;
-    if(pack_type != PT_field) {
-        try {
-            stoi(field_name);
-        } catch(invalid_argument) {
-            atomic = false;
-        }
-    }
-    else {
+
+    // If the pack type is not field, but the index is still the
+    // original field name, this must not be an atomic field.
+    if(pack_type != PT_field && index == field_name) {
         atomic = false;
     }
 
@@ -199,35 +156,35 @@ void Operator::unpack_json_object(DCPacker &unpacker, string field_name, json &o
             break;
         case PT_double:
             if(atomic) {
-                object[stoi(field_name)] = unpacker.unpack_double();
+                object[stoi(index)] = unpacker.unpack_double();
             } else {
                 object = unpacker.unpack_double();
             }
             break;
         case PT_int64:
             if(atomic) {
-                object[stoi(field_name)] = unpacker.unpack_int64();
+                object[stoi(index)] = unpacker.unpack_int64();
             } else {
                 object = unpacker.unpack_double();
             }
             break;
         case PT_uint64:
             if(atomic) {
-                object[stoi(field_name)] = unpacker.unpack_uint64();
+                object[stoi(index)] = unpacker.unpack_uint64();
             } else {
                 object = unpacker.unpack_uint64();
             }
             break;
         case PT_int:
             if(atomic) {
-                object[stoi(field_name)] = unpacker.unpack_int();
+                object[stoi(index)] = unpacker.unpack_int();
             } else {
                 object = unpacker.unpack_int();
             }
             break;
         case PT_uint:
             if(atomic) {
-                object[stoi(field_name)] = unpacker.unpack_uint();
+                object[stoi(index)] = unpacker.unpack_uint();
             } else {
                 object = unpacker.unpack_uint();
             }
@@ -235,7 +192,7 @@ void Operator::unpack_json_object(DCPacker &unpacker, string field_name, json &o
         case PT_string:
         case PT_blob:
             if(atomic) {
-                object[stoi(field_name)] = unpacker.unpack_string();
+                object[stoi(index)] = unpacker.unpack_string();
             } else {
                 object = unpacker.unpack_string();
             }
@@ -246,7 +203,7 @@ void Operator::unpack_json_object(DCPacker &unpacker, string field_name, json &o
             size_t i = 0;
             while(unpacker.more_nested_fields()) {
                 object[i] = nullptr;
-                unpack_json_object(unpacker, to_string(i), object);
+                unpack_json_object(unpacker, field_name, to_string(i), object);
                 ++i;
             }
 
@@ -283,7 +240,7 @@ json Operator::unpack_json_objects(DatagramIterator &dgi, DCClass *dclass, size_
         // Unpack.
         unpacker.begin_unpack(field);
         fields[field_name] = json::array();
-        unpack_json_object(unpacker, field_name, fields[field_name]);
+        unpack_json_object(unpacker, field_name, field_name, fields[field_name]);
         unpacker.end_unpack();
     }
 
@@ -378,7 +335,7 @@ void Operator::update_object(uint32_t database_id, uint32_t do_id, DCClass *dcla
             field_packer.begin_pack(field);
 
             // Pack the object.
-            pack_json_object(field_packer, it.key(), old_fields);
+            pack_json_object(field_packer, old_fields[it.key()]);
 
             // Stop packing.
             field_packer.end_pack();
@@ -388,7 +345,7 @@ void Operator::update_object(uint32_t database_id, uint32_t do_id, DCClass *dcla
         field_packer.begin_pack(field);
 
         // Pack the object.
-        pack_json_object(field_packer, it.key(), new_fields);
+        pack_json_object(field_packer, new_fields[it.key()]);
 
         // Stop packing the field.
         field_packer.end_pack();

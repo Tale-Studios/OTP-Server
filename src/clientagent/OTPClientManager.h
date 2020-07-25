@@ -63,13 +63,14 @@ class Operator
     }
 
     // Packs a particular JSON object into a DCPacker.
-    void pack_json_object(DCPacker &packer, std::string field_name, nlohmann::json &object, size_t parameters = -1, bool is_field = 0);
+    void pack_json_object(DCPacker &packer, nlohmann::json &object);
 
     // Packs all given fields in a JSON object into a DCPacker.
     void pack_json_objects(DCPacker &packer, DCClass *dclass, nlohmann::json &object, bool raw = 1);
 
     // Unpacks a particular element in a DCPacker into a JSON object.
-    void unpack_json_object(DCPacker &unpacker, std::string field_name, nlohmann::json &object);
+    void unpack_json_object(DCPacker &unpacker, std::string field_name,
+                            std::string index, nlohmann::json &object);
 
     // Unpacks all packed fields in a DCPacker into a JSON object.
     nlohmann::json unpack_json_objects(DatagramIterator &dgi, DCClass *dclass, size_t field_count);
