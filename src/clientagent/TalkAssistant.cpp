@@ -36,14 +36,27 @@ void TalkPath::handle_talk(DatagramIterator& dgi)
 
     // Pack a new field.
     DCPacker packer;
-    pack_json_objects(packer, m_manager->m_player_class, field);
+    pack_json_objects(packer, m_manager->m_player_class, field, 0);
 
-    // Update the field.
+    // Update the field for the local avatar.
     DatagramPtr resp = Datagram::create();
     resp->add_uint16(CLIENT_OBJECT_UPDATE_FIELD);
     resp->add_doid(m_av_id);
+    resp->add_uint16(103);
     resp->add_data(packer.get_string());
     m_client.forward_datagram(resp);
+
+    // Update the field for any visible avatars.
+    vector<doid_t> avs = m_client.get_visible_avatars();
+    for(doid_t av_id : avs) {
+        DatagramPtr dg = Datagram::create(get_puppet_connection_channel(av_id),
+                                          m_av_id,
+                                          STATESERVER_OBJECT_SET_FIELD);
+        dg->add_doid(m_av_id);
+        dg->add_uint16(103);
+        dg->add_data(packer.get_string());
+        m_client.dispatch_datagram(dg);
+    }
 }
 
 void TalkPath::handle_talk_whisper(DatagramIterator& dgi)

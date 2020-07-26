@@ -157,6 +157,18 @@ class DisneyClient : public Client, public NetworkHandler
         return (m_channel >> 32) & 0xFFFFFFFF;
     }
 
+    virtual vector<doid_t> get_visible_avatars()
+    {
+        vector<doid_t> avs;
+        for(auto it : m_visible_objects) {
+            if(it.second.dcc == g_cm->m_player_class && it.second.id != m_av_id) {
+                avs.push_back(it.second.id);
+            }
+        }
+
+        return avs;
+    }
+
     virtual void write_server_event(LoggedEvent& event)
     {
         log_event(event);
