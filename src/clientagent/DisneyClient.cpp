@@ -2,6 +2,7 @@
 #include "ClientFactory.h"
 #include "ClientAgent.h"
 #include "ToontownClientManager.h"
+#include "TalkAssistant.h"
 #include "DisneyClientMessages.h"
 #include "net/NetworkClient.h"
 #include "core/global.h"
@@ -23,6 +24,8 @@ static ConfigVariable<string> game_name_config("game_name", "otp", disneyclient_
 static ConfigVariable<uint32_t> database_id_config("database_id", 4003, disneyclient_config);
 static ConfigVariable<string> database_file_config("database_file", "account-bridge.json", disneyclient_config);
 static ConfigVariable<string> name_file_config("name_file", "NameMasterEnglish.txt", disneyclient_config);
+static ConfigVariable<string> whitelist_file_config("whitelist_file", "whitelist.dat", disneyclient_config);
+static ConfigVariable<string> blacklist_file_config("blacklist_file", "blacklist.dat", disneyclient_config);
 static ConfigVariable<vector<string> > dna_files_config("dna_files", vector<string>(), disneyclient_config);
 static ConfigVariable<bool> send_hash_to_client("send_hash", true, disneyclient_config);
 static ConfigVariable<bool> send_version_to_client("send_version", true, disneyclient_config);
@@ -42,6 +45,9 @@ static ToontownClientManager* g_ttcm;
 static DNALoader* g_dna_loader;
 static DNAStorage* g_dna_store;
 
+// And our TalkAssistant:
+static TalkAssistant* g_talk_assistant;
+
 class DisneyClient : public Client, public NetworkHandler
 {
   private:
@@ -51,6 +57,8 @@ class DisneyClient : public Client, public NetworkHandler
     string m_game_name;
     string m_name_file;
     string m_database_file;
+    string m_whitelist_file;
+    string m_blacklist_file;
     vector<string> m_dna_files;
     uint32_t m_database_id;
     bool m_clean_disconnect;
@@ -71,6 +79,8 @@ class DisneyClient : public Client, public NetworkHandler
         m_dna_files(dna_files_config.get_rval(config)),
         m_name_file(name_file_config.get_rval(config)),
         m_database_file(database_file_config.get_rval(config)),
+        m_whitelist_file(whitelist_file_config.get_rval(config)),
+        m_blacklist_file(blacklist_file_config.get_rval(config)),
         m_database_id(database_id_config.get_rval(config)), m_clean_disconnect(false),
         m_send_hash(send_hash_to_client.get_rval(config)),
         m_send_version(send_version_to_client.get_rval(config)),
@@ -127,6 +137,16 @@ class DisneyClient : public Client, public NetworkHandler
         m_state = state;
     }
 
+    inline virtual string get_whitelist_file()
+    {
+        return m_whitelist_file;
+    }
+
+    inline virtual string get_blacklist_file()
+    {
+        return m_blacklist_file;
+    }
+
     inline virtual uint32_t get_avatar_id()
     {
         return m_channel & 0xFFFFFFFF;
@@ -177,9 +197,6 @@ class DisneyClient : public Client, public NetworkHandler
 
             // Load each DNA file from the config.
             for(auto it = m_dna_files.begin(); it != m_dna_files.end(); ++it) {
-                // Log the DNA file.
-                m_client_agent->log()->info() << "Loading DNA file: " << *it << endl;
-
                 // Open up the file.
                 ifstream dna_file(*it);
                 istream& dna_stream = dna_file;
@@ -239,6 +256,13 @@ class DisneyClient : public Client, public NetworkHandler
                                                m_database_id, "developer", m_database_file, m_name_file);
             g_cm = g_ttcm;
         }
+
+        if(g_talk_assistant == nullptr) {
+            g_talk_assistant = new TalkAssistant(g_cm);
+        }
+
+        // Load the whitelist.
+        g_talk_assistant->load_whitelist(m_whitelist_file);
 
         // We only log client-connected events for non-LOCAL (HAProxy L4 checks et al) NetworkClient objects.
         if(!m_client->is_local()) {
@@ -834,6 +858,17 @@ class DisneyClient : public Client, public NetworkHandler
                 send_disconnect(CLIENT_DISCONNECT_FORBIDDEN_FIELD, ss.str(), true);
                 return;
             }
+        }
+
+        if((field_id == 103 || field_id == 104) && m_av_id > 0) {
+            // The client is sending a talk field. We need to take this over
+            // and route it through the TalkPath system.
+            if(field_id == 103) {
+                g_talk_assistant->set_talk(*this, m_av_id, dgi);
+            } else {
+                g_talk_assistant->set_talk_whisper(*this, m_av_id, dgi);
+            }
+            return;
         }
 
         // If a datagram read-related exception occurs while unpacking data it will be handled by

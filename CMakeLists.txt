@@ -245,6 +245,8 @@ if(BUILD_CLIENTAGENT)
             src/clientagent/OTPClientManager.cpp
             src/clientagent/ToontownClientManager.h
             src/clientagent/ToontownClientManager.cpp
+            src/clientagent/TalkAssistant.h
+            src/clientagent/TalkAssistant.cpp
         )
     else()
         set(CLIENTAGENT_FILES

@@ -52,7 +52,6 @@ struct Interest {
     std::unordered_set<zone_t> zones;
 };
 
-
 class Client; // forward declaration
 // An InterestOperation represents the process of receiving the entirety of the interest
 // within a client.  The InterestOperation stays around until all new visible objects from a

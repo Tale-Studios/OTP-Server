@@ -73,7 +73,7 @@ class Operator
                             std::string index, nlohmann::json &object);
 
     // Unpacks all packed fields in a DCPacker into a JSON object.
-    nlohmann::json unpack_json_objects(DatagramIterator &dgi, DCClass *dclass, size_t field_count);
+    nlohmann::json unpack_json_objects(DatagramIterator &dgi, DCClass *dclass, size_t field_count, int16_t set_field_id = 0);
 
     // Creates an object in the specified database.
     // database_id specifies the control channel of the target database.

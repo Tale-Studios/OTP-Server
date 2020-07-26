@@ -213,7 +213,7 @@ void Operator::unpack_json_object(DCPacker &unpacker, string field_name,
     }
 }
 
-json Operator::unpack_json_objects(DatagramIterator &dgi, DCClass *dclass, size_t field_count)
+json Operator::unpack_json_objects(DatagramIterator &dgi, DCClass *dclass, size_t field_count, int16_t set_field_id)
 {
     // Set up the unpacker with the data from the DGI.
     DCPacker unpacker;
@@ -225,7 +225,12 @@ json Operator::unpack_json_objects(DatagramIterator &dgi, DCClass *dclass, size_
     // Iterate over each field.
     for(size_t i = 0; i < field_count; ++i) {
         // First, unpack the field id.
-        int16_t field_id = unpacker.raw_unpack_int16();
+        int16_t field_id = 0;
+        if(set_field_id) {
+            field_id = set_field_id;
+        } else {
+            field_id = unpacker.raw_unpack_int16();
+        }
 
         // Get the field by its index.
         DCField *field = dclass->get_field_by_index(field_id);
