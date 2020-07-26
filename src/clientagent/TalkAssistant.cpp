@@ -23,13 +23,16 @@ void TalkPath::handle_talk(DatagramIterator& dgi)
     dgi.read_remainder();
     string message = data["setTalk"].at(3);
     vector<TalkModification> mod_vector = m_talk_assistant->filter_whitelist(message);
-
-    json mods = json::array();
-    for(auto mod : mod_vector) {
-        mods.push_back(mod.offset);
-        mods.push_back(mod.size);
+    json field;
+    if(mod_vector.size()) {
+        json mods = json::array();
+        for(auto mod : mod_vector) {
+            mods.push_back(json::array({mod.offset, mod.size}));
+        }
+        field = {{"setTalk", {m_av_id, 0, "", message, mods, 0}}};
+    } else {
+        field = {{"setTalk", {m_av_id, 0, "", message, json::array(), 0}}};
     }
-    json field = {{"setTalk", {m_av_id, 0, "", message, mods, 0}}};
 
     // Pack a new field.
     DCPacker packer;
@@ -37,11 +40,10 @@ void TalkPath::handle_talk(DatagramIterator& dgi)
 
     // Update the field.
     DatagramPtr resp = Datagram::create();
-    resp->add_server_header(m_av_id, 0, STATESERVER_OBJECT_SET_FIELD);
+    resp->add_uint16(CLIENT_OBJECT_UPDATE_FIELD);
     resp->add_doid(m_av_id);
-    resp->add_uint16(103);
     resp->add_data(packer.get_string());
-    m_client.dispatch_datagram(resp);
+    m_client.forward_datagram(resp);
 }
 
 void TalkPath::handle_talk_whisper(DatagramIterator& dgi)

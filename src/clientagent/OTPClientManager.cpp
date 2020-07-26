@@ -49,17 +49,9 @@ void Operator::pack_json_object(DCPacker &packer, json &object)
             case PT_blob:
                 packer.pack_string(object);
                 break;
-            case PT_array: {
-                packer.push();
-
-                for(size_t i = 0; i < object.size(); ++i) {
-                    pack_json_object(packer, object.at(i));
-                }
-
-                packer.pop();
-            }
-            break;
-            case PT_field: {
+            case PT_array:
+            case PT_field:
+            case PT_class: {
                 packer.push();
 
                 for(size_t i = 0; i < object.size(); ++i) {
