@@ -1276,6 +1276,13 @@ void LoadAvatarOperation::set_avatar()
     dg->add_uint32(0);
     m_client.dispatch_datagram(dg);
 
+    // Set chat flag fields.
+    DCField* common_chat_field = m_manager->m_player_class->get_field_by_name("setCommonChatFlags");
+    DCField* whitelist_chat_field = m_manager->m_player_class->get_field_by_name("setWhitelistChatFlags");
+    send_update(m_av_id, m_manager->m_player_class, common_chat_field, json({{"setCommonChatFlags", {0}}}));
+    send_update(m_av_id, m_manager->m_player_class, whitelist_chat_field, json({{"setWhitelistChatFlags", {1}}}));
+
+    // Set the initial location.
     DatagramPtr ldg = Datagram::create();
     ldg->add_server_header(m_av_id, m_client.get_client_channel(), STATESERVER_OBJECT_SET_LOCATION);
     ldg->add_uint32(0);
