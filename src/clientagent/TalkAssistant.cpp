@@ -59,13 +59,36 @@ void TalkPath::handle_talk(DatagramIterator& dgi)
     }
 }
 
-void TalkPath::handle_talk_whisper(DatagramIterator& dgi)
+void TalkPath::handle_talk_whisper(DatagramIterator& dgi, uint32_t do_id)
 {
     // First, we need to unpack the setTalkWhisper field into a JSON object.
     json data = unpack_json_objects(dgi, m_manager->m_player_class, 1, 104);
     dgi.read_remainder();
     string message = data["setTalkWhisper"].at(3);
-    vector<TalkModification> mods = m_talk_assistant->filter_whitelist(message);
+    vector<TalkModification> mod_vector = m_talk_assistant->filter_whitelist(message);
+    json field;
+    if(mod_vector.size()) {
+        json mods = json::array();
+        for(auto mod : mod_vector) {
+            mods.push_back(json::array({mod.offset, mod.size}));
+        }
+        field = {{"setTalkWhisper", {m_av_id, 0, "", message, mods, 0}}};
+    } else {
+        field = {{"setTalkWhisper", {m_av_id, 0, "", message, json::array(), 0}}};
+    }
+
+    // Pack a new field.
+    DCPacker packer;
+    pack_json_objects(packer, m_manager->m_player_class, field, 0);
+
+    // Update the field for the recipient.
+    DatagramPtr resp = Datagram::create(get_puppet_connection_channel(do_id),
+                                        m_av_id,
+                                        STATESERVER_OBJECT_SET_FIELD);
+    resp->add_doid(do_id);
+    resp->add_uint16(104);
+    resp->add_data(packer.get_string());
+    m_client.dispatch_datagram(resp);
 }
 
 TalkAssistant::TalkAssistant(OTPClientManager *manager) : m_manager(manager)
@@ -160,11 +183,12 @@ void TalkAssistant::set_talk(DisneyClient& client, uint32_t av_id, DatagramItera
     talk_path->handle_talk(dgi);
 }
 
-void TalkAssistant::set_talk_whisper(DisneyClient& client, uint32_t av_id, DatagramIterator& dgi)
+void TalkAssistant::set_talk_whisper(DisneyClient& client, uint32_t do_id,
+                                     uint32_t av_id, DatagramIterator& dgi)
 {
     // Create a new TalkPath.
     TalkPath* talk_path = new TalkPath(this, m_manager, client, av_id);
 
     // Handle the talk request.
-    talk_path->handle_talk_whisper(dgi);
+    talk_path->handle_talk_whisper(dgi, do_id);
 }

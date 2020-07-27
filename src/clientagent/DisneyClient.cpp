@@ -878,7 +878,7 @@ class DisneyClient : public Client, public NetworkHandler
             if(field_id == 103) {
                 g_talk_assistant->set_talk(*this, m_av_id, dgi);
             } else {
-                g_talk_assistant->set_talk_whisper(*this, m_av_id, dgi);
+                g_talk_assistant->set_talk_whisper(*this, do_id, m_av_id, dgi);
             }
             return;
         }

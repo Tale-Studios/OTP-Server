@@ -15,9 +15,9 @@ struct TalkModification
 };
 
 // A TalkPath represents the channels in which a talk message
-// is transmitted to. A whisper path would be directly transmitted
-// to a certain player, whereas a public message path would require
-// a different
+// would be transmitted to. A whisper path would be directly transmitted
+// to a certain player, whereas a public message path would be sent
+// to every visible object.
 class TalkPath : public Operator
 {
   public:
@@ -26,7 +26,7 @@ class TalkPath : public Operator
     ~TalkPath();
 
     void handle_talk(DatagramIterator& dgi);
-    void handle_talk_whisper(DatagramIterator& dgi);
+    void handle_talk_whisper(DatagramIterator& dgi, uint32_t do_id);
 
   private:
     TalkAssistant* m_talk_assistant;
@@ -46,7 +46,8 @@ class TalkAssistant
     std::vector<TalkModification> filter_whitelist(std::string message);
 
     void set_talk(DisneyClient& client, uint32_t av_id, DatagramIterator& dgi);
-    void set_talk_whisper(DisneyClient& client, uint32_t av_id, DatagramIterator& dgi);
+    void set_talk_whisper(DisneyClient& client, uint32_t do_id,
+                          uint32_t av_id, DatagramIterator& dgi);
 
   private:
     std::unique_ptr<LogCategory> m_log;
