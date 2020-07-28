@@ -707,27 +707,16 @@ class DisneyClient : public Client, public NetworkHandler
         }
         break;
         case CLIENT_REMOVE_FRIEND: {
-            DatagramPtr dg = Datagram::create(4501, m_channel, DBSERVER_SET_STORED_VALUES);
-            dg->add_data(dgi.read_remainder());
-            route_datagram(dg);
         }
         break;
         case CLIENT_GET_FRIEND_LIST: {
-            DatagramPtr dg = Datagram::create(4501, m_channel, DBSERVER_GET_STORED_VALUES);
-            route_datagram(dg);
         }
         break;
         case CLIENT_GET_FRIEND_LIST_EXTENDED: {
-            DatagramPtr dg = Datagram::create(4501, m_channel, DBSERVER_GET_STORED_VALUES);
-            dg->add_data(dgi.read_remainder());
-            route_datagram(dg);
         }
         break;
         case CLIENT_GET_AVATAR_DETAILS:
         case CLIENT_GET_PET_DETAILS: {
-            DatagramPtr dg = Datagram::create(4501, m_channel, STATESERVER_OBJECT_QUERY_FIELDS);
-            dg->add_data(dgi.read_remainder());
-            route_datagram(dg);
         }
         break;
         case CLIENT_ADD_INTEREST:
