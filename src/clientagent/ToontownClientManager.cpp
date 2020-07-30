@@ -522,10 +522,34 @@ void GetAvatarInfoOperation::handle_query(DatagramIterator &dgi, uint32_t ctx, u
         return;
     }
 
+    DCClass* dclass = g_dcf->get_class(dclass_id);
     m_is_pet = dclass_id == pet_class->get_number();
     uint16_t field_count = dgi.read_uint16();
 
-    m_field_dg = Datagram::create(dgi.get_remaining_bytes());
+    // Get required DB fields.
+    dgsize_t offset = dgi.tell();
+    for(size_t i = 0; i < field_count; ++i) {
+        uint16_t field_id = dgi.read_uint16();
+        DCField *field = dclass->get_field_by_index(field_id);
+        if(field->is_required() && !field->as_molecular_field()) {
+            dgi.unpack_field(field, m_required_fields[field]);
+        } else {
+            dgi.skip_field(field);
+        }
+    }
+
+    // Get default values for non-DB required fields.
+    for(int i = 0; i < dclass->get_num_inherited_fields(); ++i) {
+        DCField *field = dclass->get_inherited_field(i);
+        if(field->is_required() && !field->is_db() && !field->as_molecular_field() &&
+           m_required_fields.find(field) == m_required_fields.end()) {
+            string val = field->get_default_value();
+            m_required_fields[field] = vector<uint8_t>(val.begin(), val.end());
+        }
+    }
+
+    // Go back.
+    dgi.seek(offset);
 
     // Unpack the fields and store them.
     if(m_is_pet) {
@@ -552,7 +576,7 @@ void GetAvatarInfoOperation::finished()
         m_ttmgr->m_av_basic_info_cache[m_av_id] = c_info;
     }
 
-    m_op->friend_callback(true, m_sender_av_id, m_fields, m_field_dg, m_is_pet);
+    m_op->friend_callback(true, m_sender_av_id, m_fields, m_required_fields, m_is_pet);
 
     off();
 }
@@ -635,7 +659,8 @@ void GetFriendsListOperation::get_friend_details()
 }
 
 void GetFriendsListOperation::friend_callback(bool success, uint32_t av_id,
-                                              json &fields, DatagramHandle dg, bool is_pet,
+                                              json &fields, map<DCField*, vector<uint8_t> > required_fields,
+                                              bool is_pet,
                                               vector<AvatarBasicInfo> friend_details,
                                               vector<uint32_t> online_friends,
                                               bool online)
@@ -699,7 +724,7 @@ void GetFriendsListOperation::get_activated_resp(uint32_t do_id, uint32_t ctx, b
 
 void GetFriendsListOperation::finished()
 {
-    m_op->friend_callback(true, m_av_id, json({}), Datagram::create(), 0, m_friend_details, m_online_friends);
+    m_op->friend_callback(true, m_av_id, json({}), map<DCField*, vector<uint8_t> >{}, 0, m_friend_details, m_online_friends);
 
     off();
 }
@@ -758,7 +783,7 @@ void UpdateAvatarFieldOperation::update_avatar_field()
 
 void UpdateAvatarFieldOperation::finished()
 {
-    m_op->friend_callback(true, m_sender_av_id, json({}), Datagram::create(),
+    m_op->friend_callback(true, m_sender_av_id, json({}), map<DCField*, vector<uint8_t> >{},
                           0, vector<AvatarBasicInfo>{}, vector<uint32_t>{}, m_online);
 
     off();
@@ -782,7 +807,8 @@ ToontownFriendOperator::~ToontownFriendOperator()
 }
 
 void ToontownFriendOperator::friend_callback(bool success, uint32_t av_id,
-                                             json &fields, DatagramHandle dg, bool is_pet,
+                                             json &fields, map<DCField*, vector<uint8_t> > required_fields,
+                                             bool is_pet,
                                              vector<AvatarBasicInfo> friend_details,
                                              vector<uint32_t> online_friends,
                                              bool online)
@@ -790,7 +816,7 @@ void ToontownFriendOperator::friend_callback(bool success, uint32_t av_id,
     if(m_op_name == "GFL") {
         got_friends_list(success, av_id, friend_details, online_friends);
     } else if(m_op_name == "GAI") {
-        got_avatar_details(success, av_id, dg, fields, is_pet);
+        got_avatar_details(success, av_id, fields, required_fields, is_pet);
     }
 }
 
@@ -825,11 +851,11 @@ void ToontownFriendOperator::got_friends_list(bool success, uint32_t av_id,
     m_client.forward_datagram(datagram);
 }
 
-void ToontownFriendOperator::got_avatar_details(bool success, uint32_t av_id, DatagramHandle dg,
-                                                json &fields, bool is_pet)
+void ToontownFriendOperator::got_avatar_details(bool success, uint32_t av_id,
+                                                json &fields, map<DCField*, vector<uint8_t> > required_fields,
+                                                bool is_pet)
 {
     uint32_t to_av_id = fields["avId"].get<uint32_t>();
-    fields.erase("avId");
 
     if(!success) {
         DatagramPtr datagram = Datagram::create();
@@ -854,7 +880,12 @@ void ToontownFriendOperator::got_avatar_details(bool success, uint32_t av_id, Da
     }
     datagram->add_uint32(to_av_id);
     datagram->add_uint8(0);
-    datagram->add_data(dg->get_data(), dg->size());
+    for(int i = 0; i < dclass->get_num_inherited_fields(); ++i) {
+        DCField *field = dclass->get_inherited_field(i);
+        if(required_fields.find(field) != required_fields.end()) {
+            datagram->add_data(required_fields[field]);
+        }
+    }
     m_client.forward_datagram(datagram);
 }
 

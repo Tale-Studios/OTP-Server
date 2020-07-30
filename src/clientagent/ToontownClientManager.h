@@ -179,7 +179,7 @@ class GetAvatarInfoOperation : virtual public GameOperation
     uint32_t m_sender_av_id;
     uint32_t m_av_id;
     bool m_is_pet;
-    DatagramHandle m_field_dg;
+    std::map<DCField*, std::vector<uint8_t> > m_required_fields;
     nlohmann::json m_fields;
 };
 
@@ -205,7 +205,8 @@ class GetFriendsListOperation : virtual public GameOperation
     // Collects the details of each individual friend.
     void friend_callback(bool success = 0, uint32_t av_id = 0,
                          nlohmann::json &fields = nlohmann::json({}),
-                         DatagramHandle dg = Datagram::create(), bool is_pet = 0,
+                         std::map<DCField*, std::vector<uint8_t> > required_fields = std::map<DCField*, std::vector<uint8_t> >{},
+                         bool is_pet = 0,
                          std::vector<AvatarBasicInfo> friend_details = std::vector<AvatarBasicInfo>{},
                          std::vector<uint32_t> online_friends = std::vector<uint32_t>{},
                          bool online = 0);
@@ -279,7 +280,8 @@ class ToontownFriendOperator : virtual public Operator
     // Calls a callback function depending on the operation name.
     void friend_callback(bool success = 0, uint32_t av_id = 0,
                          nlohmann::json &fields = nlohmann::json({}),
-                         DatagramHandle dg = Datagram::create(), bool is_pet = 0,
+                         std::map<DCField*, std::vector<uint8_t> > required_fields = std::map<DCField*, std::vector<uint8_t> >{},
+                         bool is_pet = 0,
                          std::vector<AvatarBasicInfo> friend_details = std::vector<AvatarBasicInfo>{},
                          std::vector<uint32_t> online_friends = std::vector<uint32_t>{},
                          bool online = 0);
@@ -291,8 +293,9 @@ class ToontownFriendOperator : virtual public Operator
                           std::vector<uint32_t> online_friends);
 
     // Sends the avatar/pet details to the avatar.
-    void got_avatar_details(bool success, uint32_t av_id, DatagramHandle dg,
-                            nlohmann::json &fields, bool is_pet);
+    void got_avatar_details(bool success, uint32_t av_id,
+                            nlohmann::json &fields, std::map<DCField*, std::vector<uint8_t> > required_fields,
+                            bool is_pet);
 
     std::string m_op_name;
 };

@@ -24,8 +24,16 @@ void Operator::pack_json_object(DCPacker &packer, json &object)
     // Get the current pack type.
     DCPackType pack_type = packer.get_pack_type();
 
+    // For non-atomic fields:
+    if(pack_type != PT_field && object.type() == json::value_t::object) {
+        for(auto& el : object.items()) {
+            pack_json_object(packer, el.value());
+        }
+        return;
+    }
+
     // Determine if the object is valid or not.
-    bool valid = object.type() != nlohmann::detail::value_t::null;
+    bool valid = object.type() != json::value_t::null;
     if(valid) {
         // Pack based on the expected pack type.
         switch(pack_type)
@@ -49,8 +57,19 @@ void Operator::pack_json_object(DCPacker &packer, json &object)
             case PT_blob:
                 packer.pack_string(object);
                 break;
+            case PT_field: {
+                packer.push();
+
+                for(auto& el : object.items()) {
+                    for(size_t i = 0; i < el.value().size(); ++i) {
+                        pack_json_object(packer, el.value().at(i));
+                    }
+                }
+
+                packer.pop();
+            }
+            break;
             case PT_array:
-            case PT_field:
             case PT_class: {
                 packer.push();
 
@@ -84,39 +103,8 @@ void Operator::pack_json_objects(DCPacker &packer, DCClass *dclass, json &object
         }
         packer.begin_pack(field);
 
-        // Make sure we don't have any null values.
-        // If we do, just pack a default value ourselves.
-        bool done = false;
-        if(it.value() == nullptr) {
-            done = true;
-        }
-        for(auto& el : it.value().items()) {
-            if(el.value() == nullptr) {
-                done = true;
-                break;
-            }
-            for(auto& ell : el.value().items()) {
-                if(ell.value() == nullptr) {
-                    done = true;
-                    break;
-                }
-            }
-        }
-        if(done) {
-            // Pack a default value and end this iteration.
-            packer.pack_default_value();
-            packer.end_pack();
-            object.erase(it.key());
-            continue;
-        }
-
-        // If this is an atomic field, pack the object by its field name.
-        // Otherwise, just toss it in.
-        if(field->as_atomic_field() != nullptr) {
-            pack_json_object(packer, object[it.key()]);
-        } else {
-            pack_json_object(packer, object);
-        }
+        // Pack the object.
+        pack_json_object(packer, json({{it.key(), it.value()}}));
 
         // Stop packing the field.
         packer.end_pack();
@@ -194,9 +182,18 @@ void Operator::unpack_json_object(DCPacker &unpacker, string field_name,
 
             size_t i = 0;
             while(unpacker.more_nested_fields()) {
-                object[i] = nullptr;
-                unpack_json_object(unpacker, field_name, to_string(i), object);
-                ++i;
+                if(field_name == index) {
+                    object[i] = json::array();
+                    unpack_json_object(unpacker, field_name, to_string(i), object);
+                    ++i;
+                } else {
+                    if(i == 0) {
+                        object[stoi(index)] = json::array();
+                    }
+
+                    unpack_json_object(unpacker, field_name, to_string(i), object[stoi(index)]);
+                    ++i;
+                }
             }
 
             unpacker.pop();
@@ -332,7 +329,7 @@ void Operator::update_object(uint32_t database_id, uint32_t do_id, DCClass *dcla
             field_packer.begin_pack(field);
 
             // Pack the object.
-            pack_json_object(field_packer, old_fields[it.key()]);
+            pack_json_object(field_packer, json({{it.key(), old_fields[it.key()]}}));
 
             // Stop packing.
             field_packer.end_pack();
@@ -342,7 +339,7 @@ void Operator::update_object(uint32_t database_id, uint32_t do_id, DCClass *dcla
         field_packer.begin_pack(field);
 
         // Pack the object.
-        pack_json_object(field_packer, new_fields[it.key()]);
+        pack_json_object(field_packer, json({{it.key(), new_fields[it.key()]}}));
 
         // Stop packing the field.
         field_packer.end_pack();
@@ -420,7 +417,8 @@ void Operator::handle_lookup(bool success, uint32_t account_id, string play_toke
 }
 
 void Operator::friend_callback(bool success, uint32_t av_id,
-                               json &fields, DatagramHandle dg, bool is_pet,
+                               json &fields, map<DCField*, vector<uint8_t> > required_fields,
+                               bool is_pet,
                                vector<AvatarBasicInfo> friend_details,
                                vector<uint32_t> online_friends,
                                bool online)
@@ -647,7 +645,7 @@ void LoginOperation::create_account()
     json account = {
         {"ACCOUNT_AV_SET", {0, 0, 0, 0, 0, 0}},
         {"ESTATE_ID", 0},
-        {"ACCOUNT_AV_SET_DEL", {}},
+        {"ACCOUNT_AV_SET_DEL", {json::array()}},
         {"CREATED", ctime(&end_time)},
         {"LAST_LOGIN", ctime(&end_time)}
     };
