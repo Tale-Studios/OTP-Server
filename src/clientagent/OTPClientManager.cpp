@@ -421,7 +421,7 @@ void Operator::friend_callback(bool success, uint32_t av_id,
                                bool is_pet,
                                vector<AvatarBasicInfo> friend_details,
                                vector<uint32_t> online_friends,
-                               bool online)
+                               bool online, bool last)
 {
     // Must be handled by inheritor.
 }
@@ -438,7 +438,7 @@ void Operator::send_update(uint32_t do_id, DCClass *dclass, DCField *field, json
     packer.raw_pack_uint16(field->get_number());
 
     packer.begin_pack(field);
-    pack_json_objects(packer, dclass, values);
+    pack_json_objects(packer, dclass, values, 0);
     DatagramPtr dg = Datagram::create();
     if(packer.end_pack()) {
         dg->add_data(packer.get_string());

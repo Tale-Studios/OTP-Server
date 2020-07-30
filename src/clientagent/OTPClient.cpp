@@ -558,13 +558,13 @@ class OTPClient : public Client, public NetworkHandler
 
         // If the class couldn't be found, error out:
         if(!dcc) {
+            dgi.skip(dgi.get_remaining());
             if(is_historical_object(do_id)) {
                 // The client isn't disconnected in this case because it could be a delayed
                 // message, we also have to skip to the end so a disconnect overside_datagram
                 // is not sent.
                 // TODO: Allow configuration to limit how long historical objects remain,
                 //       for example with a timeout or bad-message limit.
-                dgi.skip(dgi.get_remaining());
             } else {
                 stringstream ss;
                 ss << "Client tried to send update to nonexistent object " << do_id;

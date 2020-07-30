@@ -55,7 +55,7 @@ class Operator
                                  bool is_pet = 0,
                                  std::vector<AvatarBasicInfo> friend_details = std::vector<AvatarBasicInfo>{},
                                  std::vector<uint32_t> online_friends = std::vector<uint32_t>{},
-                                 bool online = 0);
+                                 bool online = 0, bool last = 0);
 
   protected:
 

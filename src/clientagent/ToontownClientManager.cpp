@@ -488,10 +488,10 @@ void SetNamePatternOperation::set_name()
 }
 
 GetAvatarInfoOperation::GetAvatarInfoOperation(ToontownClientManager *manager, DisneyClient& client, Operator *op,
-                                               uint32_t target, uint32_t sender_av_id, uint32_t av_id) :
+                                               uint32_t target, uint32_t sender_av_id, uint32_t av_id, bool last, bool user) :
     GameOperation(manager, client, target), Operator(manager, client),
     m_op(op), m_sender_av_id(sender_av_id),
-    m_av_id(av_id), m_is_pet(false), m_ttmgr(manager)
+    m_av_id(av_id), m_is_pet(false), m_last(last), m_user(user), m_ttmgr(manager)
 {
 }
 
@@ -576,17 +576,21 @@ void GetAvatarInfoOperation::finished()
         m_ttmgr->m_av_basic_info_cache[m_av_id] = c_info;
     }
 
-    m_op->friend_callback(true, m_sender_av_id, m_fields, m_required_fields, m_is_pet);
+    m_op->friend_callback(true, m_sender_av_id, m_fields, m_required_fields, m_is_pet, vector<AvatarBasicInfo>{}, vector<uint32_t>{}, 0, m_last);
 
-    off();
+    if(m_user) {
+        off();
+    }
 }
 
 void GetAvatarInfoOperation::failure(string reason)
 {
     warning(reason);
-    m_op->friend_callback();
+    m_op->friend_callback(false, m_sender_av_id, json({}), map<DCField*, vector<uint8_t> >{}, m_is_pet, vector<AvatarBasicInfo>{}, vector<uint32_t>{}, 0, m_last);
 
-    off();
+    if(m_user) {
+        off();
+    }
 }
 
 GetFriendsListOperation::GetFriendsListOperation(ToontownClientManager *manager, DisneyClient& client,
@@ -663,7 +667,7 @@ void GetFriendsListOperation::friend_callback(bool success, uint32_t av_id,
                                               bool is_pet,
                                               vector<AvatarBasicInfo> friend_details,
                                               vector<uint32_t> online_friends,
-                                              bool online)
+                                              bool online, bool last)
 {
     uint32_t given_av_id = fields["avId"].get<uint32_t>();
 
@@ -738,9 +742,9 @@ void GetFriendsListOperation::failure(string reason)
 }
 
 UpdateAvatarFieldOperation::UpdateAvatarFieldOperation(ToontownClientManager *manager, DisneyClient& client, Operator *op,
-                                                       uint32_t target, uint32_t sender_av_id, uint32_t av_id) :
-    GameOperation(manager, client, target), Operator(manager, client),
-    m_op(op), m_online(false), m_sender_av_id(sender_av_id), m_av_id(av_id)
+                                                       uint32_t sender_av_id, uint32_t av_id, bool last) :
+    Operator(manager, client), m_op(op), m_online(false),
+    m_sender_av_id(sender_av_id), m_av_id(av_id), m_last(last)
 {
 }
 
@@ -748,7 +752,7 @@ UpdateAvatarFieldOperation::~UpdateAvatarFieldOperation()
 {
 }
 
-void UpdateAvatarFieldOperation::start(string field, vector<uint32_t> value)
+void UpdateAvatarFieldOperation::start(string field, json& value)
 {
     m_field = field;
     m_value = value;
@@ -773,9 +777,9 @@ void UpdateAvatarFieldOperation::update_avatar_field()
     if(m_online) {
         send_update(m_av_id, m_manager->m_player_class,
                     m_manager->m_player_class->get_field_by_name(m_field),
-                    json({{m_field, {m_value}}}));
+                    json({{m_field, m_value}}));
     } else {
-        update_object(m_manager->m_database_id, m_av_id, m_manager->m_player_class, json({{m_field, {m_value}}}), json({}));
+        update_object(m_manager->m_database_id, m_av_id, m_manager->m_player_class, json({{m_field, m_value}}), json({}));
     }
 
     finished();
@@ -783,22 +787,19 @@ void UpdateAvatarFieldOperation::update_avatar_field()
 
 void UpdateAvatarFieldOperation::finished()
 {
-    m_op->friend_callback(true, m_sender_av_id, json({}), map<DCField*, vector<uint8_t> >{},
-                          0, vector<AvatarBasicInfo>{}, vector<uint32_t>{}, m_online);
-
-    off();
+    m_op->friend_callback(true, m_sender_av_id, json({{"avId", m_av_id}}), map<DCField*, vector<uint8_t> >{},
+                          0, vector<AvatarBasicInfo>{}, vector<uint32_t>{}, m_online, m_last);
 }
 
 void UpdateAvatarFieldOperation::failure(string reason)
 {
     warning(reason);
-    m_op->friend_callback();
-
-    off();
+    m_op->friend_callback(false, m_sender_av_id, json({{"avId", m_av_id}}), map<DCField*, vector<uint8_t> >{},
+                          0, vector<AvatarBasicInfo>{}, vector<uint32_t>{}, m_online, m_last);
 }
 
 ToontownFriendOperator::ToontownFriendOperator(ToontownClientManager *manager, DisneyClient& client, string op_name) :
-    Operator(manager, client), m_op_name(op_name)
+    Operator(manager, client), m_ttmgr(manager), m_op_name(op_name)
 {
 }
 
@@ -811,12 +812,24 @@ void ToontownFriendOperator::friend_callback(bool success, uint32_t av_id,
                                              bool is_pet,
                                              vector<AvatarBasicInfo> friend_details,
                                              vector<uint32_t> online_friends,
-                                             bool online)
+                                             bool online, bool last)
 {
     if(m_op_name == "GFL") {
         got_friends_list(success, av_id, friend_details, online_friends);
     } else if(m_op_name == "GAI") {
         got_avatar_details(success, av_id, fields, required_fields, is_pet);
+    } else if(m_op_name == "RF") {
+        if(!success) {
+            return;
+        }
+
+        // If we received fields, this is from an avatar info operation.
+        // Otherwise, a field update operation.
+        if(fields.size() != 1) {
+            handle_remove_friend(success, av_id, fields, last);
+        } else {
+            handle_friend_removed(success, av_id, fields, last);
+        }
     }
 }
 
@@ -887,6 +900,44 @@ void ToontownFriendOperator::got_avatar_details(bool success, uint32_t av_id,
         }
     }
     m_client.forward_datagram(datagram);
+}
+
+void ToontownFriendOperator::handle_remove_friend(bool success, uint32_t friend_id, json &fields, bool last)
+{
+    if(!success) {
+        return;
+    }
+
+    uint32_t av_id = fields["avId"].get<uint32_t>();
+
+    vector<vector<uint32_t> > friends_list = fields["setFriendsList"].get<vector<vector<vector<uint32_t> > > >()[0];
+    uint32_t search_id = friend_id;
+    for(auto it = friends_list.begin(); it != friends_list.end(); ++it) {
+        auto entry = *it;
+        if(entry[0] == search_id) {
+            friends_list.erase(it);
+            break;
+        }
+    }
+
+    UpdateAvatarFieldOperation* operation = new UpdateAvatarFieldOperation(m_ttmgr, m_client, this,
+                                                                           search_id, av_id, last);
+    operation->start("setFriendsList", json::array({friends_list}));
+}
+
+void ToontownFriendOperator::handle_friend_removed(bool success, uint32_t friend_id, json &fields, bool last)
+{
+    if(!success) {
+        return;
+    }
+
+    uint32_t av_id = fields["avId"].get<uint32_t>();
+
+    if(!last) {
+        GetAvatarInfoOperation* operation = new GetAvatarInfoOperation(m_ttmgr, m_client, this,
+                                                                       0, av_id, friend_id, 1, 0);
+        operation->start();
+    }
 }
 
 ToontownClientManager::ToontownClientManager(DCClass* player_class, uint32_t database_id, string database_type,
@@ -1020,6 +1071,18 @@ void ToontownClientManager::get_avatar_details_request(DisneyClient& client, uin
     ToontownFriendOperator* op = new ToontownFriendOperator(this, client, "GAI");
     GetAvatarInfoOperation* operation = new GetAvatarInfoOperation(this, client, op,
                                                                    sender, sender_av_id, av_id);
+    bool success = run_operation(operation, sender);
+    if(success) {
+        operation->start();
+    }
+}
+
+void ToontownClientManager::remove_friend_request(DisneyClient& client, uint32_t sender,
+                                                  uint32_t friend_id, uint32_t av_id)
+{
+    ToontownFriendOperator* op = new ToontownFriendOperator(this, client, "RF");
+    GetAvatarInfoOperation* operation = new GetAvatarInfoOperation(this, client, op,
+                                                                   sender, friend_id, av_id);
     bool success = run_operation(operation, sender);
     if(success) {
         operation->start();

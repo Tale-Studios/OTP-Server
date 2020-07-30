@@ -155,7 +155,7 @@ class GetAvatarInfoOperation : virtual public GameOperation
 {
   public:
     GetAvatarInfoOperation(ToontownClientManager *manager, DisneyClient& client, Operator *op,
-                           uint32_t target, uint32_t sender_av_id, uint32_t av_id);
+                           uint32_t target, uint32_t sender_av_id, uint32_t av_id, bool last = 0, bool user = 1);
     virtual ~GetAvatarInfoOperation();
 
     // Starts the operation.
@@ -179,6 +179,8 @@ class GetAvatarInfoOperation : virtual public GameOperation
     uint32_t m_sender_av_id;
     uint32_t m_av_id;
     bool m_is_pet;
+    bool m_last;
+    bool m_user;
     std::map<DCField*, std::vector<uint8_t> > m_required_fields;
     nlohmann::json m_fields;
 };
@@ -209,7 +211,7 @@ class GetFriendsListOperation : virtual public GameOperation
                          bool is_pet = 0,
                          std::vector<AvatarBasicInfo> friend_details = std::vector<AvatarBasicInfo>{},
                          std::vector<uint32_t> online_friends = std::vector<uint32_t>{},
-                         bool online = 0);
+                         bool online = 0, bool last = 0);
 
     // Checks if we're ready to see if the friends are online.
     void test_finished();
@@ -237,15 +239,15 @@ class GetFriendsListOperation : virtual public GameOperation
     std::vector<uint32_t> m_friends_list;
 };
 
-class UpdateAvatarFieldOperation : virtual public GameOperation
+class UpdateAvatarFieldOperation : virtual public Operator
 {
   public:
     UpdateAvatarFieldOperation(ToontownClientManager *manager, DisneyClient& client, Operator *op,
-                               uint32_t target, uint32_t sender_av_id, uint32_t av_id);
+                               uint32_t sender_av_id, uint32_t av_id, bool last = 0);
     virtual ~UpdateAvatarFieldOperation();
 
     // Starts the operation with the field & value.
-    void start(std::string field, std::vector<uint32_t> value);
+    void start(std::string field, nlohmann::json &value);
 
     // Checks if the avatar is online.
     void get_avatar_online();
@@ -267,8 +269,9 @@ class UpdateAvatarFieldOperation : virtual public GameOperation
     uint32_t m_sender_av_id;
     uint32_t m_av_id;
     std::string m_field;
-    std::vector<uint32_t> m_value;
+    nlohmann::json m_value;
     bool m_online;
+    bool m_last;
 };
 
 class ToontownFriendOperator : virtual public Operator
@@ -284,7 +287,7 @@ class ToontownFriendOperator : virtual public Operator
                          bool is_pet = 0,
                          std::vector<AvatarBasicInfo> friend_details = std::vector<AvatarBasicInfo>{},
                          std::vector<uint32_t> online_friends = std::vector<uint32_t>{},
-                         bool online = 0);
+                         bool online = 0, bool last = 0);
 
   private:
     // Sends the friends list response to the avatar.
@@ -297,6 +300,13 @@ class ToontownFriendOperator : virtual public Operator
                             nlohmann::json &fields, std::map<DCField*, std::vector<uint8_t> > required_fields,
                             bool is_pet);
 
+    // Updates the avatar's friends list for friend removal.
+    void handle_remove_friend(bool success, uint32_t friend_id, nlohmann::json &fields, bool last = 0);
+
+    // Updates the removed friend's friends list to remove the avatar.
+    void handle_friend_removed(bool success, uint32_t friend_id, nlohmann::json &fields, bool last = 0);
+
+    ToontownClientManager* m_ttmgr;
     std::string m_op_name;
 };
 
@@ -339,4 +349,8 @@ class ToontownClientManager : virtual public OTPClientManager
     // Runs a GetAvatarInfoOperation (for both avatars & pets).
     void get_avatar_details_request(DisneyClient& client, uint32_t sender,
                                     uint32_t av_id, uint32_t sender_av_id);
+
+    // Removes a friend from an avatar's friends list.
+    void remove_friend_request(DisneyClient& client, uint32_t sender,
+                               uint32_t friend_id, uint32_t av_id);
 };

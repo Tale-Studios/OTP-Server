@@ -706,9 +706,10 @@ class DisneyClient : public Client, public NetworkHandler
             m_av_id = av_id;
         }
         break;
-        case CLIENT_REMOVE_FRIEND: {
-        }
-        break;
+        case CLIENT_REMOVE_FRIEND:
+            g_ttcm->remove_friend_request(*this, get_account_id(),
+                                          dgi.read_uint32(), get_avatar_id());
+            break;
         case CLIENT_GET_FRIEND_LIST:
             g_ttcm->get_friends_list_request(*this, get_account_id(), get_avatar_id());
             break;
@@ -806,15 +807,22 @@ class DisneyClient : public Client, public NetworkHandler
         // Get class of object from cache
         DCClass *dcc = lookup_object(do_id);
 
+        // A bit of a hack, but Toontown clients will notify offline
+        // friends when they get removed, which is unnecessary.
+        if(!dcc && field_id == 109) { // friendsNotify
+            dgi.skip(dgi.get_remaining());
+            return;
+        }
+
         // If the class couldn't be found, error out:
         if(!dcc) {
+            dgi.skip(dgi.get_remaining());
             if(is_historical_object(do_id)) {
                 // The client isn't disconnected in this case because it could be a delayed
                 // message, we also have to skip to the end so a disconnect overside_datagram
                 // is not sent.
                 // TODO: Allow configuration to limit how long historical objects remain,
                 //       for example with a timeout or bad-message limit.
-                dgi.skip(dgi.get_remaining());
             } else {
                 stringstream ss;
                 ss << "Client tried to send update to nonexistent object " << do_id;
