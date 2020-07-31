@@ -965,6 +965,18 @@ void ToontownFriendOperator::handle_friend_removed(bool success, uint32_t friend
         GetAvatarInfoOperation* operation = new GetAvatarInfoOperation(m_ttmgr, m_client, this,
                                                                        0, av_id, friend_id, 1, 0);
         operation->start();
+    } else {
+        // Undeclare to the friend.
+        DatagramPtr frienddg = Datagram::create();
+        frienddg->add_server_header(get_puppet_connection_channel(friend_id), m_client.get_client_channel(), CLIENTAGENT_UNDECLARE_OBJECT);
+        frienddg->add_uint32(av_id);
+        m_client.dispatch_datagram(frienddg);
+
+        // Undeclare to the avatar.
+        DatagramPtr avdg = Datagram::create();
+        avdg->add_server_header(get_puppet_connection_channel(av_id), m_client.get_client_channel(), CLIENTAGENT_UNDECLARE_OBJECT);
+        avdg->add_uint32(friend_id);
+        m_client.dispatch_datagram(avdg);
     }
 }
 
