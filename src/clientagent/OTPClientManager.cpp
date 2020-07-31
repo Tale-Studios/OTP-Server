@@ -432,7 +432,7 @@ void Operator::send_update(uint32_t do_id, DCClass *dclass, DCField *field, json
 
     packer.raw_pack_uint8(1);
     packer.RAW_PACK_CHANNEL(do_id);
-    packer.RAW_PACK_CHANNEL(m_client.get_client_channel());
+    packer.RAW_PACK_CHANNEL(0);
     packer.raw_pack_uint16(STATESERVER_OBJECT_SET_FIELD);
     packer.raw_pack_uint32(do_id);
     packer.raw_pack_uint16(field->get_number());
@@ -1317,6 +1317,7 @@ void LoadAvatarOperation::set_avatar()
     // Set the client's active avatar.
     m_client.set_avatar_id(m_av_id);
     m_client.set_avatar_name(m_avatar["setName"].get<vector<string> >()[0]);
+    m_client.populate_friends_list(m_avatar["setFriendsList"].get<vector<vector<vector<uint32_t> > > >()[0]);
 
     // We can now finally grant ownership.
     DatagramPtr odg = Datagram::create();

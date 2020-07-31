@@ -57,8 +57,6 @@ class Operator
                                  std::vector<uint32_t> online_friends = std::vector<uint32_t>{},
                                  bool online = 0, bool last = 0);
 
-  protected:
-
     INLINE int64_t get_puppet_connection_channel(uint32_t do_id)
     {
         return do_id + ((int64_t)1001L << 32);
@@ -82,6 +80,7 @@ class Operator
     // Unpacks all packed fields in a DCPacker into a JSON object.
     nlohmann::json unpack_json_objects(DatagramIterator &dgi, DCClass *dclass, size_t field_count, int16_t set_field_id = 0);
 
+  protected:
     // Creates an object in the specified database.
     // database_id specifies the control channel of the target database.
     // dclass specifies the class of the object to be created.

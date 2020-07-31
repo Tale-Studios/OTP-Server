@@ -15,8 +15,10 @@
 #include "dna/DNAStorage.h"
 #include "dna/DNAVisGroup.h"
 #include "util/Timeout.h"
+#include "json/json.hpp"
 
 using namespace std;
+using json = nlohmann::json;
 
 static ConfigGroup disneyclient_config("libdisney", ca_client_config);
 
@@ -67,6 +69,7 @@ class DisneyClient : public Client, public NetworkHandler
     bool m_send_version;
     doid_t m_av_id;
     string m_av_name;
+    vector<vector<uint32_t> > m_friends_list;
 
     // Heartbeat:
     long m_heartbeat_timeout;
@@ -158,20 +161,75 @@ class DisneyClient : public Client, public NetworkHandler
         return (m_channel >> 32) & 0xFFFFFFFF;
     }
 
-    virtual void set_avatar_id(uint32_t av_id)
+    inline virtual void set_avatar_id(uint32_t av_id)
     {
         m_av_id = av_id;
     }
 
-    virtual void set_avatar_name(string name)
+    inline virtual void set_avatar_name(string name)
     {
         m_av_name = name;
     }
 
-    virtual string get_avatar_name()
+    inline virtual string get_avatar_name()
     {
         return m_av_name;
     }
+
+    virtual void populate_friends_list(vector<vector<uint32_t> > friends_list)
+    {
+        m_friends_list = friends_list;
+    }
+
+    virtual bool is_friend(uint32_t av_id)
+    {
+        for(auto entry : m_friends_list) {
+            if(entry[0] == av_id) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    virtual bool is_true_friend(uint32_t av_id)
+    {
+        for(auto entry : m_friends_list) {
+            if(entry[0] == av_id && entry[1]) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    virtual size_t count_true_friends()
+    {
+        size_t true_friends = 0;
+
+        for(auto entry : m_friends_list) {
+            if(entry[1]) {
+                ++true_friends;
+            }
+        }
+
+        return true_friends;
+    }
+
+    virtual unordered_set<channel_t> get_visible_targets(bool filter_tf = false)
+    {
+        unordered_set<channel_t> avs;
+        for(auto it : m_visible_objects) {
+            if(it.second.dcc == g_cm->m_player_class && it.second.id != m_av_id) {
+                if((filter_tf && !is_true_friend(it.second.id)) || !filter_tf) {
+                    avs.insert(it.second.id + ((int64_t)1001L << 32));
+                }
+            }
+        }
+
+        return avs;
+    }
+
 
     virtual vector<doid_t> get_visible_avatars()
     {
@@ -497,6 +555,24 @@ class DisneyClient : public Client, public NetworkHandler
         resp->add_uint16(CLIENT_OBJECT_UPDATE_FIELD);
         resp->add_doid(do_id);
         resp->add_uint16(field_id);
+
+        // Hackily update our friends list if this is the setFriendsList field:
+        DCField* field = g_dcf->get_field_by_index(field_id);
+        if(field->get_name() == "setFriendsList") {
+            dgsize_t offset = dgi.tell();
+            json fields;
+            DCPacker unpacker;
+            unpacker.set_unpack_data(dgi.get_remaining_bytes());
+            unpacker.begin_unpack(field);
+            fields[field->get_name()] = json::array();
+            Operator* slave_op = new Operator(g_cm, *this);
+            slave_op->unpack_json_object(unpacker, field->get_name(), field->get_name(), fields[field->get_name()]);
+            delete slave_op;
+            unpacker.end_unpack();
+            populate_friends_list(fields["setFriendsList"].get<vector<vector<vector<uint32_t> > > >()[0]);
+            dgi.seek(offset);
+        }
+
         resp->add_data(dgi.read_remainder());
         m_client->send_datagram(resp);
     }
