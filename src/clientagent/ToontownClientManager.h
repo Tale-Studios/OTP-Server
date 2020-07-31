@@ -278,7 +278,8 @@ class UpdateAvatarFieldOperation : virtual public Operator
 class ToontownFriendOperator : virtual public Operator
 {
   public:
-    ToontownFriendOperator(ToontownClientManager *manager, DisneyClient& client, std::string op_name);
+    ToontownFriendOperator(ToontownClientManager *manager, DisneyClient& client,
+                           std::string op_name, uint32_t av_id = 0);
     virtual ~ToontownFriendOperator();
 
     // Calls a callback function depending on the operation name.
@@ -313,8 +314,16 @@ class ToontownFriendOperator : virtual public Operator
     // Removes the avatar from each friend's friends list.
     void handle_clear_list_got_friend_data(uint32_t friend_id, nlohmann::json &fields);
 
+    // Gets the activation status of each friend.
+    void handle_going_offline(uint32_t av_id, nlohmann::json &fields);
+
+    // Undeclares the avatar going offline for each activated friend.
+    void get_activated_resp(uint32_t do_id, uint32_t ctx, bool activated);
+
     ToontownClientManager* m_ttmgr;
     std::string m_op_name;
+    uint32_t m_av_id;
+    uint32_t m_acc_id;
 };
 
 class ToontownClientManager : virtual public OTPClientManager
@@ -335,6 +344,9 @@ class ToontownClientManager : virtual public OTPClientManager
 
     // Handles Toontown-specific avatar deletion events.
     void handle_avatar_deleted(DisneyClient& client, uint32_t av_id);
+
+    // Handles Toontown-specific avatar disconnection events.
+    void lost_object(DisneyClient& client, uint32_t av_id);
 
     // Runs a ToontownLoginOperation.
     void login(DisneyClient& client, std::string play_token, channel_t sender, std::string version,

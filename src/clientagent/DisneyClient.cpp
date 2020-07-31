@@ -157,6 +157,11 @@ class DisneyClient : public Client, public NetworkHandler
         return (m_channel >> 32) & 0xFFFFFFFF;
     }
 
+    virtual void set_avatar_id(uint32_t av_id)
+    {
+        m_av_id = av_id;
+    }
+
     virtual vector<doid_t> get_visible_avatars()
     {
         vector<doid_t> avs;
@@ -392,6 +397,11 @@ class DisneyClient : public Client, public NetworkHandler
             m_heartbeat_timer = nullptr;
         }
 
+        // If we had an active avatar, it is now lost.
+        if(m_av_id != 0) {
+            g_cm->lost_object(*this, m_av_id);
+        }
+
         annihilate();
     }
 
@@ -611,6 +621,16 @@ class DisneyClient : public Client, public NetworkHandler
         case DBSS_OBJECT_GET_ACTIVATED_RESP:
             handle_get_activated_resp(dgi);
             break;
+        case CLIENT_FRIEND_ONLINE: {
+        }
+        break;
+        case CLIENT_FRIEND_OFFLINE: {
+            DatagramPtr resp = Datagram::create();
+            resp->add_uint16(CLIENT_FRIEND_OFFLINE);
+            resp->add_uint32(dgi.read_uint32());
+            m_client->send_datagram(resp);
+        }
+        break;
         default:
             return false;
         }

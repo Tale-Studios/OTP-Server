@@ -802,8 +802,10 @@ void UpdateAvatarFieldOperation::failure(string reason)
     }
 }
 
-ToontownFriendOperator::ToontownFriendOperator(ToontownClientManager *manager, DisneyClient& client, string op_name) :
-    Operator(manager, client), m_ttmgr(manager), m_op_name(op_name)
+ToontownFriendOperator::ToontownFriendOperator(ToontownClientManager *manager, DisneyClient& client,
+                                               string op_name, uint32_t av_id) :
+    Operator(manager, client),
+    m_ttmgr(manager), m_op_name(op_name), m_av_id(av_id), m_acc_id(0)
 {
 }
 
@@ -844,6 +846,12 @@ void ToontownFriendOperator::friend_callback(bool success, uint32_t av_id,
         } else {
             handle_clear_list_got_friend_data(av_id, fields);
         }
+    } else if(m_op_name == "LO") {
+        if(!success) {
+            return;
+        }
+
+        handle_going_offline(av_id, fields);
     }
 }
 
@@ -984,6 +992,46 @@ void ToontownFriendOperator::handle_clear_list_got_friend_data(uint32_t friend_i
     operation->start("setFriendsList", json::array({friends_list}));
 }
 
+void ToontownFriendOperator::handle_going_offline(uint32_t av_id, json &fields)
+{
+    vector<vector<uint32_t> > friends_list = fields["setFriendsList"].get<vector<vector<vector<uint32_t> > > >()[0];
+
+    m_acc_id = fields["setDISLid"].get<vector<uint32_t> >()[0];
+
+    // Check the status of each friend.
+    for(auto entry : friends_list) {
+        get_activated(entry[0]);
+    }
+}
+
+void ToontownFriendOperator::get_activated_resp(uint32_t do_id, uint32_t ctx, bool activated)
+{
+    Operator::get_activated_resp(do_id, ctx, activated);
+
+    // We only want to do this for friends that are online.
+    if(!activated || m_av_id == 0 || m_acc_id == 0) {
+        return;
+    }
+
+    // Undeclare to the friend.
+    DatagramPtr frienddg = Datagram::create();
+    frienddg->add_server_header(get_puppet_connection_channel(do_id), m_client.get_client_channel(), CLIENTAGENT_UNDECLARE_OBJECT);
+    frienddg->add_uint32(m_av_id);
+    m_client.dispatch_datagram(frienddg);
+
+    // Undeclare to the now-offline avatar.
+    DatagramPtr avdg = Datagram::create();
+    avdg->add_server_header(get_account_connection_channel(m_acc_id), m_client.get_client_channel(), CLIENTAGENT_UNDECLARE_OBJECT);
+    avdg->add_uint32(do_id);
+    m_client.dispatch_datagram(avdg);
+
+    // Tell them they're offline.
+    DatagramPtr resp = Datagram::create();
+    resp->add_server_header(get_puppet_connection_channel(do_id), m_client.get_client_channel(), CLIENT_FRIEND_OFFLINE);
+    resp->add_uint32(m_av_id);
+    m_client.dispatch_datagram(resp);
+}
+
 ToontownClientManager::ToontownClientManager(DCClass* player_class, uint32_t database_id, string database_type,
                                              string database_file, string name_file) :
     OTPClientManager(player_class, database_id, 6, database_type, database_file)
@@ -1052,6 +1100,15 @@ void ToontownClientManager::handle_avatar_deleted(DisneyClient& client, uint32_t
 {
     // Clear the avatar's friends list.
     clear_list(client, av_id);
+}
+
+void ToontownClientManager::lost_object(DisneyClient& client, uint32_t av_id)
+{
+    // We only want to handle the friend offline message here.
+    ToontownFriendOperator* op = new ToontownFriendOperator(this, client, "LO", av_id);
+    GetAvatarInfoOperation* operation = new GetAvatarInfoOperation(this, client, op,
+                                                                   0, av_id, av_id, 0, 0);
+    operation->start();
 }
 
 void ToontownClientManager::login(DisneyClient& client, string play_token, channel_t sender, string version,

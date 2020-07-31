@@ -1274,7 +1274,7 @@ void LoadAvatarOperation::set_avatar()
     DatagramPtr cleanup_datagram = Datagram::create();
     cleanup_datagram->add_server_header(m_av_id, channel, STATESERVER_OBJECT_DELETE_RAM);
     cleanup_datagram->add_uint32(m_av_id);
-    m_client.create_post_remove(m_client.get_allocated_channel(), cleanup_datagram);
+    m_client.create_post_remove(channel, cleanup_datagram);
 
     // We will now activate the avatar on the DBSS.
     DatagramPtr dg = Datagram::create();
@@ -1313,6 +1313,9 @@ void LoadAvatarOperation::set_avatar()
 
     m_client.set_client_channel(m_target << 32 | m_av_id); // accountId in high 32 bits, 0 in low (no avatar).
     m_client.subscribe_to_channel(m_client.get_client_channel());
+
+    // Set the client's active avatar.
+    m_client.set_avatar_id(m_av_id);
 
     // We can now finally grant ownership.
     DatagramPtr odg = Datagram::create();
@@ -1353,6 +1356,9 @@ void UnloadAvatarOperation::unload_avatar()
     // Get the client channel.
     channel_t channel = get_account_connection_channel((uint32_t)m_target);
 
+    // We have lost this object.
+    m_manager->lost_object(m_client, m_av_id);
+
     // First, remove our post removes.
     m_client.wipe_post_removes(m_client.get_allocated_channel());
 
@@ -1366,6 +1372,9 @@ void UnloadAvatarOperation::unload_avatar()
 
     m_client.set_client_channel(m_target << 32); // accountId in high 32 bits, no avatar in low.
     m_client.subscribe_to_channel(m_client.get_client_channel());
+
+    // Remove the avatar from the client.
+    m_client.set_avatar_id(0);
 
     // Reset the session object.
     DatagramPtr sdg = Datagram::create();
@@ -1414,6 +1423,10 @@ string OTPClientManager::create_name(vector<pair<int16_t, uint8_t> > patterns)
 }
 
 void OTPClientManager::handle_avatar_deleted(DisneyClient& client, uint32_t av_id)
+{
+}
+
+void OTPClientManager::lost_object(DisneyClient& client, uint32_t av_id)
 {
 }
 
