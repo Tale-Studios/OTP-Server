@@ -23,13 +23,13 @@ void TalkPath::handle_talk(DatagramIterator& dgi)
     dgi.read_remainder();
 
     // Extract the message and filter it through the blacklist.
-    string message = data["setTalk"].at(3);
-    if(!message.size()) {
+    string pure_message = data["setTalk"].at(3);
+    if(!pure_message.size()) {
         return;
     }
 
-    tuple<string, bool> filter = m_talk_assistant->filter_blacklist(message);
-    message = get<0>(filter);
+    tuple<string, bool> filter = m_talk_assistant->filter_blacklist(pure_message);
+    string message = get<0>(filter);
     bool blacklisted = get<1>(filter);
 
     if(blacklisted) {
@@ -57,9 +57,9 @@ void TalkPath::handle_talk(DatagramIterator& dgi)
     // We'll start off by preparing the local path.
     json local_path;
     if(m_client.count_true_friends() || blacklisted) {
-        // We have true friends; just pass an empty array
+        // We have true friends or used a blacklisted word; just pass an empty array
         // in place of any necessary modifications.
-        local_path = {{"setTalk", {m_av_id, 0, m_client.get_avatar_name(), message, json::array(), 0}}};
+        local_path = {{"setTalk", {m_av_id, 0, m_client.get_avatar_name(), pure_message, json::array(), 0}}};
     } else {
         // No true friends here; pass any existing modifications.
         local_path = {{"setTalk", {m_av_id, 0, m_client.get_avatar_name(), message, mods, 0}}};
@@ -71,8 +71,12 @@ void TalkPath::handle_talk(DatagramIterator& dgi)
     // And finally, the true friend path, which is the same as the local path.
     // If the true friend path were to be used, it would mean that the local avatar
     // does have true friends, and therefore the local path wouldn't be scrubbed
-    // anyways.
+    // anyways. The exception for this is if the message contains a blacklisted
+    // word; in this case, we'll just apply whitelist modifications.
     json tf_path = local_path;
+    if(blacklisted) {
+        tf_path = normal_path;
+    }
 
     // Now we need to calculate targets! We skip this for the local path as we
     // can just directly dispatch that to our client. For the normal path,
