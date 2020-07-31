@@ -421,6 +421,9 @@ class OTPClientManager
     // Forms name patterns into a full name string. Must be inherited.
     virtual std::string create_name(std::vector<std::pair<int16_t, uint8_t> > patterns);
 
+    // Game-specific method to handle avatar deletion.
+    virtual void handle_avatar_deleted(DisneyClient& client, uint32_t av_id);
+
     // Runs a LoginOperation.
     virtual void login(DisneyClient& client, std::string play_token, channel_t sender, std::string version,
                        uint32_t dc_hash, int32_t token_type, std::string want_magic_words);

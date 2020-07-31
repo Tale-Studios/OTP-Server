@@ -1208,6 +1208,7 @@ void RemoveAvatarOperation::handle_update(uint32_t ctx, uint8_t success)
     event.add("av_id", to_string(m_av_id));
     event.add("target", to_string(m_target));
     m_client.write_server_event(event);
+    m_manager->handle_avatar_deleted(m_client, m_av_id);
     GetAvatarsOperation::post_account_func();
 }
 
@@ -1410,6 +1411,10 @@ bool OTPClientManager::judge_name(string name)
 string OTPClientManager::create_name(vector<pair<int16_t, uint8_t> > patterns)
 {
     return "";
+}
+
+void OTPClientManager::handle_avatar_deleted(DisneyClient& client, uint32_t av_id)
+{
 }
 
 void OTPClientManager::login(DisneyClient& client, string play_token, channel_t sender, string version,

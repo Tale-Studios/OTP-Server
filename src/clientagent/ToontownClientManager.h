@@ -243,7 +243,7 @@ class UpdateAvatarFieldOperation : virtual public Operator
 {
   public:
     UpdateAvatarFieldOperation(ToontownClientManager *manager, DisneyClient& client, Operator *op,
-                               uint32_t sender_av_id, uint32_t av_id, bool last = 0);
+                               uint32_t sender_av_id, uint32_t av_id, bool last = 0, bool callback = 1);
     virtual ~UpdateAvatarFieldOperation();
 
     // Starts the operation with the field & value.
@@ -272,6 +272,7 @@ class UpdateAvatarFieldOperation : virtual public Operator
     nlohmann::json m_value;
     bool m_online;
     bool m_last;
+    bool m_callback;
 };
 
 class ToontownFriendOperator : virtual public Operator
@@ -306,6 +307,12 @@ class ToontownFriendOperator : virtual public Operator
     // Updates the removed friend's friends list to remove the avatar.
     void handle_friend_removed(bool success, uint32_t friend_id, nlohmann::json &fields, bool last = 0);
 
+    // Pulls the avatar information for each friend.
+    void handle_clear_list_got_friends_list(uint32_t av_id, nlohmann::json &fields);
+
+    // Removes the avatar from each friend's friends list.
+    void handle_clear_list_got_friend_data(uint32_t friend_id, nlohmann::json &fields);
+
     ToontownClientManager* m_ttmgr;
     std::string m_op_name;
 };
@@ -325,6 +332,9 @@ class ToontownClientManager : virtual public OTPClientManager
 
     // Forms name patterns into a full name string.
     std::string create_name(std::vector<std::pair<int16_t, uint8_t> > patterns);
+
+    // Handles Toontown-specific avatar deletion events.
+    void handle_avatar_deleted(DisneyClient& client, uint32_t av_id);
 
     // Runs a ToontownLoginOperation.
     void login(DisneyClient& client, std::string play_token, channel_t sender, std::string version,
@@ -353,4 +363,7 @@ class ToontownClientManager : virtual public OTPClientManager
     // Removes a friend from an avatar's friends list.
     void remove_friend_request(DisneyClient& client, uint32_t sender,
                                uint32_t friend_id, uint32_t av_id);
+
+    // Clears an avatar's friends list.
+    void clear_list(DisneyClient& client, uint32_t av_id);
 };
