@@ -36,6 +36,9 @@ void TalkPath::handle_talk(DatagramIterator& dgi)
         // There have been blacklisted words. In this case, we overwrite the message,
         // and only the local avatar will be able to see what they said.
         message = "";
+        for(size_t i = 0; i < pure_message.size(); ++i) {
+            message += " ";
+        }
     }
 
     // Filter the new message through the whitelist as well.
@@ -204,6 +207,15 @@ bool TalkAssistant::in_list(string text, vector<string> list)
     text.erase(0, text.find_first_not_of(".,?!"));
     transform(text.begin(), text.end(), text.begin(),
               [](unsigned char c){ return tolower(c); });
+
+    // Nothing always works.
+    if(text.size() == 0) {
+        if(list == m_blacklist) {
+            return false;
+        }
+
+        return true;
+    }
 
     // Find it in the list.
     if(find(list.begin(), list.end(), text) != list.end()) {
