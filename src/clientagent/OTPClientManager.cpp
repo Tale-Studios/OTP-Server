@@ -1323,6 +1323,9 @@ void LoadAvatarOperation::set_avatar()
     odg->add_uint64(channel);
     m_client.dispatch_datagram(odg);
 
+    // This avatar is now coming online.
+    m_manager->coming_online(m_client, m_av_id);
+
     // Finally, shut down this operation.
     LoggedEvent event("avatar-chosen");
     event.add("av_id", to_string(m_av_id));
@@ -1423,6 +1426,10 @@ string OTPClientManager::create_name(vector<pair<int16_t, uint8_t> > patterns)
 }
 
 void OTPClientManager::handle_avatar_deleted(DisneyClient& client, uint32_t av_id)
+{
+}
+
+void OTPClientManager::coming_online(DisneyClient& client, uint32_t av_id)
 {
 }
 

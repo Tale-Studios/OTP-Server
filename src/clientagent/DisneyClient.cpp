@@ -622,12 +622,16 @@ class DisneyClient : public Client, public NetworkHandler
             handle_get_activated_resp(dgi);
             break;
         case CLIENT_FRIEND_ONLINE: {
+            DatagramPtr resp = Datagram::create();
+            resp->add_uint16(CLIENT_FRIEND_ONLINE);
+            resp->add_data(dgi.read_remainder());
+            m_client->send_datagram(resp);
         }
         break;
         case CLIENT_FRIEND_OFFLINE: {
             DatagramPtr resp = Datagram::create();
             resp->add_uint16(CLIENT_FRIEND_OFFLINE);
-            resp->add_uint32(dgi.read_uint32());
+            resp->add_data(dgi.read_remainder());
             m_client->send_datagram(resp);
         }
         break;

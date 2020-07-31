@@ -315,6 +315,9 @@ class ToontownFriendOperator : virtual public Operator
     void handle_clear_list_got_friend_data(uint32_t friend_id, nlohmann::json &fields);
 
     // Gets the activation status of each friend.
+    void handle_coming_online(uint32_t av_id, nlohmann::json &fields);
+
+    // Gets the activation status of each friend.
     void handle_going_offline(uint32_t av_id, nlohmann::json &fields);
 
     // Undeclares the avatar going offline for each activated friend.
@@ -344,6 +347,9 @@ class ToontownClientManager : virtual public OTPClientManager
 
     // Handles Toontown-specific avatar deletion events.
     void handle_avatar_deleted(DisneyClient& client, uint32_t av_id);
+
+    // Handles Toontown-specific avatar online events.
+    void coming_online(DisneyClient& client, uint32_t av_id);
 
     // Handles Toontown-specific avatar disconnection events.
     void lost_object(DisneyClient& client, uint32_t av_id);

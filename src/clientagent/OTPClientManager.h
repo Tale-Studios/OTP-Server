@@ -424,6 +424,9 @@ class OTPClientManager
     // Game-specific method to handle avatar deletion.
     virtual void handle_avatar_deleted(DisneyClient& client, uint32_t av_id);
 
+    // Game-specific method to handle avatar connection.
+    virtual void coming_online(DisneyClient& client, uint32_t av_id);
+
     // Game-specific method to handle avatar disconnection.
     virtual void lost_object(DisneyClient& client, uint32_t av_id);
 
