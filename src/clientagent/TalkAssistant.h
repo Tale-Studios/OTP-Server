@@ -41,9 +41,13 @@ class TalkAssistant
     TalkAssistant(OTPClientManager *manager);
     ~TalkAssistant();
 
+    bool in_list(std::string text, std::vector<std::string> list);
+
     void load_whitelist(std::string whitelist_path);
-    bool in_whitelist(std::string text);
     std::vector<TalkModification> filter_whitelist(std::string message);
+
+    void load_blacklist(std::string blacklist_path);
+    std::tuple<std::string, bool> filter_blacklist(std::string message);
 
     void set_talk(DisneyClient& client, uint32_t av_id, DatagramIterator& dgi);
     void set_talk_whisper(DisneyClient& client, uint32_t do_id,
@@ -55,4 +59,5 @@ class TalkAssistant
     OTPClientManager* m_manager;
 
     std::vector<std::string> m_whitelist;
+    std::vector<std::string> m_blacklist;
 };

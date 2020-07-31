@@ -141,16 +141,6 @@ class DisneyClient : public Client, public NetworkHandler
         m_state = state;
     }
 
-    inline virtual string get_whitelist_file()
-    {
-        return m_whitelist_file;
-    }
-
-    inline virtual string get_blacklist_file()
-    {
-        return m_blacklist_file;
-    }
-
     inline virtual uint32_t get_avatar_id()
     {
         return m_channel & 0xFFFFFFFF;
@@ -319,7 +309,7 @@ class DisneyClient : public Client, public NetworkHandler
 
     virtual void initialize()
     {
-        //If heartbeat, start the heartbeat timer now.
+        // If heartbeat, start the heartbeat timer now.
         if(m_heartbeat_timeout != 0) {
             m_heartbeat_timer = new Timeout(m_heartbeat_timeout,
                                 std::bind(&DisneyClient::heartbeat_timeout,
@@ -349,6 +339,9 @@ class DisneyClient : public Client, public NetworkHandler
 
         // Load the whitelist.
         g_talk_assistant->load_whitelist(m_whitelist_file);
+
+        // Load the blacklist.
+        g_talk_assistant->load_blacklist(m_blacklist_file);
 
         // We only log client-connected events for non-LOCAL (HAProxy L4 checks et al) NetworkClient objects.
         if(!m_client->is_local()) {
