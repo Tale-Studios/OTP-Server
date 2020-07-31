@@ -47,7 +47,7 @@ class TalkAssistant
     std::vector<TalkModification> filter_whitelist(std::string message);
 
     void load_blacklist(std::string blacklist_path);
-    std::tuple<std::string, bool> filter_blacklist(std::string message);
+    std::tuple<std::string, std::string> filter_blacklist(std::string message);
 
     void set_talk(DisneyClient& client, uint32_t av_id, DatagramIterator& dgi);
     void set_talk_whisper(DisneyClient& client, uint32_t do_id,

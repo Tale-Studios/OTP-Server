@@ -28,9 +28,10 @@ void TalkPath::handle_talk(DatagramIterator& dgi)
         return;
     }
 
-    tuple<string, bool> filter = m_talk_assistant->filter_blacklist(pure_message);
+    tuple<string, string> filter = m_talk_assistant->filter_blacklist(pure_message);
     string message = get<0>(filter);
-    bool blacklisted = get<1>(filter);
+    string blacklisted_word = get<1>(filter);
+    bool blacklisted = blacklisted_word.size() != 0;
 
     if(blacklisted) {
         // There have been blacklisted words. In this case, we overwrite the message,
@@ -39,6 +40,8 @@ void TalkPath::handle_talk(DatagramIterator& dgi)
         for(size_t i = 0; i < pure_message.size(); ++i) {
             message += " ";
         }
+
+        m_client.handle_blacklisted(blacklisted_word);
     }
 
     // Filter the new message through the whitelist as well.
@@ -154,11 +157,12 @@ void TalkPath::handle_talk_whisper(DatagramIterator& dgi, uint32_t do_id)
         return;
     }
 
-    tuple<string, bool> filter = m_talk_assistant->filter_blacklist(message);
+    tuple<string, string> filter = m_talk_assistant->filter_blacklist(message);
     message = get<0>(filter);
 
-    if(get<1>(filter)) {
+    if(get<1>(filter).size()) {
         // There have been blacklisted words.
+        m_client.handle_blacklisted(get<1>(filter));
         return;
     }
 
@@ -312,7 +316,7 @@ void TalkAssistant::load_blacklist(string blacklist_path)
     }
 }
 
-tuple<string, bool> TalkAssistant::filter_blacklist(string message)
+tuple<string, string> TalkAssistant::filter_blacklist(string message)
 {
     // Make a stream to split the message.
     vector<string> words;
@@ -325,10 +329,11 @@ tuple<string, bool> TalkAssistant::filter_blacklist(string message)
     }
 
     vector<string> new_words;
-    bool flag = false;
+    string flag = "";
     for(auto word : words) {
         if(in_list(word, m_blacklist)) {
-            flag = true;
+            transform(word.begin(), word.end(), word.begin(), ::toupper);
+            flag = word;
             continue;
         }
 

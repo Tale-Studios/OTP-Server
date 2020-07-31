@@ -70,6 +70,7 @@ class DisneyClient : public Client, public NetworkHandler
     doid_t m_av_id;
     string m_av_name;
     vector<vector<uint32_t> > m_friends_list;
+    uint8_t m_warning_count;
 
     // Heartbeat:
     long m_heartbeat_timeout;
@@ -89,7 +90,7 @@ class DisneyClient : public Client, public NetworkHandler
         m_send_hash(send_hash_to_client.get_rval(config)),
         m_send_version(send_version_to_client.get_rval(config)),
         m_heartbeat_timeout(heartbeat_timeout_config.get_rval(config)),
-        m_av_id(0), m_av_name("")
+        m_av_id(0), m_av_name(""), m_warning_count(0)
     {
         pre_initialize();
 
@@ -261,6 +262,42 @@ class DisneyClient : public Client, public NetworkHandler
     virtual void dispatch_datagram(DatagramHandle dg)
     {
         route_datagram(dg);
+    }
+
+    virtual void send_system_message(string message, bool aknowledge = false)
+    {
+        DatagramPtr resp = Datagram::create();
+        if(aknowledge) {
+            resp->add_uint16(CLIENT_SYSTEMMESSAGE_AKNOWLEDGE);
+        } else {
+            resp->add_uint16(CLIENT_SYSTEM_MESSAGE);
+        }
+        resp->add_string(message);
+        m_client->send_datagram(resp);
+    }
+
+    virtual void handle_blacklisted(string word)
+    {
+        // Increment the client's warning count.
+        ++m_warning_count;
+
+        // Take different action depending on the warning count:
+        switch (m_warning_count)
+        {
+            case 1:
+                // Warn the client.
+                send_system_message("Warning - Watch your language. Using inappropriate words will get you suspended. You said \"" + word + "\"");
+                break;
+            case 2:
+                // Final warning.
+                send_system_message("Final Warning. If you continue using inappropriate language you will be suspended. You said \"" + word + "\"");
+                break;
+            case 3:
+                // Ban for 24 hours.
+                send_system_message("Your account has been suspended for 24 hours for using inappropriate language.  You said \"" + word + "\"");
+                send_disconnect(CLIENT_DISCONNECT_BANNED, "Your account has been suspended for 24 hours for using inappropriate language.", true);
+                break;
+        }
     }
 
     virtual void load_DNA_files()
