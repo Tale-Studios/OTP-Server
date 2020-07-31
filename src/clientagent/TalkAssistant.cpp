@@ -29,9 +29,9 @@ void TalkPath::handle_talk(DatagramIterator& dgi)
         for(auto mod : mod_vector) {
             mods.push_back(json::array({mod.offset, mod.size}));
         }
-        field = {{"setTalk", {m_av_id, 0, "", message, mods, 0}}};
+        field = {{"setTalk", {m_av_id, 0, m_client.get_avatar_name(), message, mods, 0}}};
     } else {
-        field = {{"setTalk", {m_av_id, 0, "", message, json::array(), 0}}};
+        field = {{"setTalk", {m_av_id, 0, m_client.get_avatar_name(), message, json::array(), 0}}};
     }
 
     // Pack a new field.
@@ -72,9 +72,9 @@ void TalkPath::handle_talk_whisper(DatagramIterator& dgi, uint32_t do_id)
         for(auto mod : mod_vector) {
             mods.push_back(json::array({mod.offset, mod.size}));
         }
-        field = {{"setTalkWhisper", {m_av_id, 0, "", message, mods, 0}}};
+        field = {{"setTalkWhisper", {m_av_id, 0, m_client.get_avatar_name(), message, mods, 0}}};
     } else {
-        field = {{"setTalkWhisper", {m_av_id, 0, "", message, json::array(), 0}}};
+        field = {{"setTalkWhisper", {m_av_id, 0, m_client.get_avatar_name(), message, json::array(), 0}}};
     }
 
     // Pack a new field.

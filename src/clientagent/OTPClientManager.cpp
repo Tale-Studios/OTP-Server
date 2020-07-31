@@ -1316,6 +1316,7 @@ void LoadAvatarOperation::set_avatar()
 
     // Set the client's active avatar.
     m_client.set_avatar_id(m_av_id);
+    m_client.set_avatar_name(m_avatar["setName"].get<vector<string> >()[0]);
 
     // We can now finally grant ownership.
     DatagramPtr odg = Datagram::create();
@@ -1378,6 +1379,7 @@ void UnloadAvatarOperation::unload_avatar()
 
     // Remove the avatar from the client.
     m_client.set_avatar_id(0);
+    m_client.set_avatar_name("");
 
     // Reset the session object.
     DatagramPtr sdg = Datagram::create();

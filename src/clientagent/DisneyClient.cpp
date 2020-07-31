@@ -66,6 +66,7 @@ class DisneyClient : public Client, public NetworkHandler
     bool m_send_hash;
     bool m_send_version;
     doid_t m_av_id;
+    string m_av_name;
 
     // Heartbeat:
     long m_heartbeat_timeout;
@@ -85,7 +86,7 @@ class DisneyClient : public Client, public NetworkHandler
         m_send_hash(send_hash_to_client.get_rval(config)),
         m_send_version(send_version_to_client.get_rval(config)),
         m_heartbeat_timeout(heartbeat_timeout_config.get_rval(config)),
-        m_av_id(0)
+        m_av_id(0), m_av_name("")
     {
         pre_initialize();
 
@@ -160,6 +161,16 @@ class DisneyClient : public Client, public NetworkHandler
     virtual void set_avatar_id(uint32_t av_id)
     {
         m_av_id = av_id;
+    }
+
+    virtual void set_avatar_name(string name)
+    {
+        m_av_name = name;
+    }
+
+    virtual string get_avatar_name()
+    {
+        return m_av_name;
     }
 
     virtual vector<doid_t> get_visible_avatars()
