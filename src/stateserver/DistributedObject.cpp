@@ -793,6 +793,7 @@ void DistributedObject::handle_datagram(DatagramHandle, DatagramIterator &dgi)
     }
     case STATESERVER_OBJECT_SET_OWNER: {
         channel_t new_owner = dgi.read_channel();
+        bool send_entry = dgi.read_bool();
         m_log->trace() << "Updating owner to " << new_owner << "...\n";
         if(new_owner == m_owner_channel) {
             m_log->trace() << "... owner is the same, do nothing.\n";
@@ -810,7 +811,7 @@ void DistributedObject::handle_datagram(DatagramHandle, DatagramIterator &dgi)
 
         m_owner_channel = new_owner;
 
-        if(new_owner) {
+        if(new_owner && send_entry) {
             m_log->trace() << "... sending owner entry...\n";
             send_owner_entry(new_owner);
         }
