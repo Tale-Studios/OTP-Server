@@ -38,6 +38,7 @@ class DBStateServer final : public StateServer
     // handle_activate accepts an activate message and spawns a LoadingObject to handle it.
     void handle_activate(DatagramIterator &dgi, bool has_other);
     void handle_delete_disk(channel_t sender, DatagramIterator &dgi);
+    void handle_generate(DatagramIterator &dgi, bool has_other);
     void handle_set_field(DatagramIterator &dgi);
     void handle_set_fields(DatagramIterator &dgi);
     void handle_get_field(channel_t sender, DatagramIterator &dgi);
