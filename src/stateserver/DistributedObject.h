@@ -58,6 +58,7 @@ class DistributedObject : public MDParticipantInterface
     uint16_t m_deleted = 0;
     size_t m_deletion_count;
     uint32_t m_next_context;
+    channel_t m_generate_sender;
     std::unordered_map<zone_t, std::unordered_set<doid_t>> m_zone_objects;
     LogCategory *m_log;
 

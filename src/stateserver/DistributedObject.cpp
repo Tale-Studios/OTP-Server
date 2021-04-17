@@ -13,7 +13,7 @@ DistributedObject::DistributedObject(StateServer *stateserver, doid_t do_id, doi
                                      bool has_other) :
     m_stateserver(stateserver), m_do_id(do_id), m_parent_id(INVALID_DO_ID), m_zone_id(0),
     m_dclass(dclass), m_ai_channel(INVALID_CHANNEL), m_owner_channel(INVALID_CHANNEL),
-    m_ai_explicitly_set(false), m_parent_synchronized(false), m_next_context(0)
+    m_ai_explicitly_set(false), m_parent_synchronized(false), m_next_context(0), m_generate_sender(INVALID_CHANNEL)
 {
     stringstream name;
     name << dclass->get_name() << "(" << do_id << ")";
@@ -53,7 +53,8 @@ DistributedObject::DistributedObject(StateServer *stateserver, doid_t do_id, doi
     m_log->debug() << "Object created..." << endl;
 
     dgi.seek_payload(); // Seek back to front of payload, to read sender
-    handle_location_change(parent_id, zone_id, dgi.read_channel());
+    m_generate_sender = dgi.read_channel();
+    handle_location_change(parent_id, zone_id, m_generate_sender);
     wake_children();
 }
 
@@ -62,7 +63,7 @@ DistributedObject::DistributedObject(StateServer *stateserver, channel_t sender,
                                      UnorderedFieldValues& required, FieldValues& ram) :
     m_stateserver(stateserver), m_do_id(do_id), m_parent_id(INVALID_DO_ID), m_zone_id(0),
     m_dclass(dclass), m_ai_channel(INVALID_CHANNEL), m_owner_channel(INVALID_CHANNEL),
-    m_ai_explicitly_set(false), m_next_context(0)
+    m_ai_explicitly_set(false), m_next_context(0), m_generate_sender(sender)
 {
     stringstream name;
     name << dclass->get_name() << "(" << do_id << ")";
@@ -290,7 +291,7 @@ void DistributedObject::handle_ai_change(channel_t new_ai, channel_t sender,
     dg->add_channel(old_ai);
     route_datagram(dg);
 
-    if(new_ai) {
+    if(new_ai != m_generate_sender || old_ai) {
         m_log->trace() << "Sending AI entry to " << new_ai << ".\n";
         send_ai_entry(new_ai);
     }
