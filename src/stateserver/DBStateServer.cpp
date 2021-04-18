@@ -53,12 +53,6 @@ void DBStateServer::handle_datagram(DatagramHandle, DatagramIterator &dgi)
     case DBSS_OBJECT_DELETE_DISK:
         handle_delete_disk(sender, dgi);
         break;
-    case STATESERVER_CREATE_OBJECT_WITH_REQUIRED:
-        handle_generate(dgi, false);
-        break;
-    case STATESERVER_CREATE_OBJECT_WITH_REQUIRED_OTHER:
-        handle_generate(dgi, true);
-        break;
     case STATESERVER_OBJECT_SET_FIELD:
         handle_set_field(dgi);
         break;
@@ -227,44 +221,6 @@ void DBStateServer::handle_set_field(DatagramIterator &dgi)
         dg->add_data(dgi.read_remainder());
         route_datagram(dg);
     }
-}
-
-void DBStateServer::handle_generate(DatagramIterator &dgi, bool has_other)
-{
-    doid_t do_id = dgi.read_doid();
-    doid_t parent_id = dgi.read_doid();
-    zone_t zone_id = dgi.read_zone();
-    uint16_t dc_id = dgi.read_uint16();
-
-    // Check object is not already active
-    if(m_objs.find(do_id) != m_objs.end() || m_loading.find(do_id) != m_loading.end()) {
-        m_log->warning() << "Received generate for already-active object with id " << do_id << "\n";
-        return;
-    }
-
-    // Make sure the class exists in the file.
-    DCClass *dc_class = g_dcf->get_class(dc_id);
-    if(!dc_class) {
-        m_log->error() << "Received create for unknown dclass with class ID '" << dc_id << "'\n";
-        return;
-    }
-
-    // Make sure we aren't creating an object with a DOID of zero.
-    if(do_id == 0) {
-        m_log->error() << "Attempted to create an object with object ID 0.\n";
-        return;
-    }
-
-    // Create the object
-    DistributedObject *obj;
-    try {
-        obj = new DistributedObject(this, do_id, parent_id, zone_id, dc_class, dgi, has_other);
-    } catch(const DatagramIteratorEOF&) {
-        m_log->error() << "Received truncated generate for "
-                       << dc_class->get_name() << "(" << do_id << ")" << std::endl;
-        return;
-    }
-    receive_object(obj);
 }
 
 void DBStateServer::handle_set_fields(DatagramIterator &dgi)
